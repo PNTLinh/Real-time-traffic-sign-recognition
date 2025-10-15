@@ -10,7 +10,7 @@ traffic-sign-system/
 │
 ├── data/                          # Quản lý dữ liệu
 │   ├── loader.py                 # Load dataset, video
-│   ├── preprocess.py             # Tiền xử lý ảnh
+│   ├── preprocess.py             # Tiền xử lý ảnh cho cả vlm và yolo
 │   └── augmentation.py           # Data augmentation
 │
 ├── models/                        # Models
@@ -39,7 +39,7 @@ traffic-sign-system/
 │   ├── yolo/
 │   └── vlm/
 │
-├── datasets/                      # Dữ liệu
+├── datasets/                      # Dữ liệu 7/2/1
 │   ├── train/
 │   ├── val/
 │   └── test/
