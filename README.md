@@ -53,6 +53,23 @@ traffic-sign-system/
 ├── requirements.txt
 └── README.md
 
+### Đặc tả dữ liệu
+Bộ dữ liệu biển báo giao thông Việt Nam(vietnam-traffic-sign-vr1a7-ecrhf-xasim) có số lượng là 545 gồm 19 classes: 
+Cấm đỗ xe, Cấm dừng đỗ xe, Cấm ngược chiều, Cấm ô tô, Cấm quay đầu, Cấm rẽ phải, Cấm rẽ trái, Dừng lại, Đường không bằng phẳng,
+Đường không ưu tiên, Đường ưu tiên, Người đi bộ, Tốc độ 30, Tốc độ 40, Tốc độ 50, Tốc độ 60, Tốc độ 80, Trẻ em qua đường, Vòng xuyến.
+
+Sau khi loại đi class hiếm, sử dụng các loại augmentation như: lật ngang, dọc, xoay, dịch, phóng to, thu nhỏ, cắt ảnh, thay đổi 
+độ sáng, độ tương phản, thay đổi kênh màu, dùng Gaussian làm nhiễu mờ với xác suất khác nhau.
+Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
+
+- Hình ảnh đầu vào sau xử lý: 320x320, gồm các file ảnh có định dạng ".jpg", ".jpeg", ".png".
+- Nhãn: gồm các thông số <class_id> <x_center> <y_center> <width> <height>
+   - <class_id>: Đây là một số nguyên đại diện cho mã lớp của đối tượng.
+   - <x_center>: Tọa độ tâm theo trục X của bounding box (khung chứa đối tượng).
+   - <y_center>: Tọa độ tâm theo trục Y của bounding box.
+   - <width>: Chiều rộng của bounding box.
+   - <height>: Chiều cao của bounding box.
+
 
 
 
