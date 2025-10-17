@@ -1,1 +1,14 @@
-#config for YOLO
+train: ./processed/processed_train/images
+val: ./processed/processed_valid/images
+test: ./processed/processed_test/images
+
+nc: 20
+names: ['Cam Do Xe', 'Cam Dung Do Xe', 'Cam Nguoc Chieu', 'Cam Oto', 'Cam Quay Dau', 'Cam Re Phai', 'Cam Re Trai', 'Dung Lai', 'Duong Khong Bang Phang', 'Duong Khong Uu Tien', 'Duong Uu Tien', 'Nguoi Bi Bo', 'Toc Do 30', 'Toc Do 40', 'Toc Do 50', 'Toc Do 60', 'Toc Do 80', 'Tre Em Qua Duong', 'Vong Xuyen', 'Xe Dap']
+
+roboflow:
+  workspace: hust-iwlti
+  project: vietnam-traffic-sign-vr1a7-ecrhf-xasim
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/hust-iwlti/vietnam-traffic-sign-vr1a7-ecrhf-xasim/dataset/3  
+
