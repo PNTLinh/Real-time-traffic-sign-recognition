@@ -2,8 +2,8 @@ train: ./processed/processed_train/images
 val: ./processed/processed_valid/images
 test: ./processed/processed_test/images
 
-nc: 20
-names: ['Cam Do Xe', 'Cam Dung Do Xe', 'Cam Nguoc Chieu', 'Cam Oto', 'Cam Quay Dau', 'Cam Re Phai', 'Cam Re Trai', 'Dung Lai', 'Duong Khong Bang Phang', 'Duong Khong Uu Tien', 'Duong Uu Tien', 'Nguoi Bi Bo', 'Toc Do 30', 'Toc Do 40', 'Toc Do 50', 'Toc Do 60', 'Toc Do 80', 'Tre Em Qua Duong', 'Vong Xuyen', 'Xe Dap']
+nc: 19
+names: ['Cam Do Xe', 'Cam Dung Do Xe', 'Cam Nguoc Chieu', 'Cam Oto', 'Cam Quay Dau', 'Cam Re Phai', 'Cam Re Trai', 'Dung Lai', 'Duong Khong Bang Phang', 'Duong Khong Uu Tien', 'Duong Uu Tien', 'Nguoi Bi Bo', 'Toc Do 30', 'Toc Do 40', 'Toc Do 50', 'Toc Do 60', 'Toc Do 80', 'Tre Em Qua Duong', 'Vong Xuyen']
 
 roboflow:
   workspace: hust-iwlti
