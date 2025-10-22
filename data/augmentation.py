@@ -169,7 +169,7 @@ if __name__ == '__main__':
 
     # Lam giau cho cac class [0, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18] gap 3 lan binh thuong
     TARGET_CLASSES = [0, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18]
-    NUM_NEW_IMAGES_PER_ORIGINAL = 2
+    NUM_NEW_IMAGES_PER_ORIGINAL = 2 # cái mới được aug
     
     print("================ SCRIPT LÀM GIÀU DỮ LIỆU BẮT ĐẦU ================")
     # Lặp qua từng class trong danh sách và thực hiện augmentation
