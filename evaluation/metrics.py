@@ -4,6 +4,8 @@ from typing import List, Dict, Tuple, Iterable, Optional
 import numpy as np
 from collections import defaultdict, Counter
 
+# ========== Detection / YOLO metrics ==========
+
 def box_iou_xyxy(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """
     Tính ma trận IoU giữa hai tập bounding box dạng (x1,y1,x2,y2).
@@ -42,7 +44,7 @@ def _ap_per_class(
     gts: List[DetGT],
     preds: List[DetPred],
     cls_id: int,
-    iou_thresh: float = 0.5
+    iou_thresh: float = 0.5 # ngưỡng của IoU để coi là đúng
 ) -> float:
     # gom tất cả GT/PRED của class này
     gt_boxes = []
@@ -148,20 +150,13 @@ def detection_map(
             out[f"AP@{t:.2f}"] = float(v)
     return out
 
-# ========== Classification / VQA metrics ==========
+# ========== Classification / VLM metrics ==========
 
 def accuracy(labels: List[int], preds: List[int]) -> float:
     if not labels:
         return 0.0
     correct = sum(int(a == b) for a, b in zip(labels, preds))
     return correct / len(labels)
-
-def confusion_matrix(labels: List[int], preds: List[int], num_classes: int) -> np.ndarray:
-    cm = np.zeros((num_classes, num_classes), dtype=np.int64)
-    for y, p in zip(labels, preds):
-        if 0 <= y < num_classes and 0 <= p < num_classes:
-            cm[y, p] += 1
-    return cm
 
 def precision_recall_f1(labels: List[int], preds: List[int], num_classes: int) -> Dict[str, float]:
     cm = confusion_matrix(labels, preds, num_classes)
@@ -180,18 +175,4 @@ def precision_recall_f1(labels: List[int], preds: List[int], num_classes: int) -
         "f1_micro": float(2*tp.sum()/max(2*tp.sum()+fp.sum()+fn.sum(),1)),
     }
 
-# VQA/Text simple metrics
-def exact_match(ref: str, hyp: str) -> float:
-    return float((ref or "").strip().lower() == (hyp or "").strip().lower())
 
-def token_f1(ref: str, hyp: str) -> float:
-    ref_t = (ref or "").lower().split()
-    hyp_t = (hyp or "").lower().split()
-    ref_c = Counter(ref_t)
-    hyp_c = Counter(hyp_t)
-    common = sum((ref_c & hyp_c).values())
-    if common == 0:
-        return 0.0
-    prec = common / max(len(hyp_t), 1)
-    rec  = common / max(len(ref_t), 1)
-    return 2*prec*rec/(prec+rec)

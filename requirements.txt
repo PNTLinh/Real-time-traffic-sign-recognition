@@ -1,0 +1,8 @@
+open-clip-torch
+numpy
+torch
+torchvision
+tqdm
+pillow
+opencv-python
+pyyaml

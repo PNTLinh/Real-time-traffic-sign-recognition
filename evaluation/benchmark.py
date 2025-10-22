@@ -13,7 +13,6 @@ def _sync_cuda():
         torch.cuda.synchronize()
 
 def timeit(fn, warmup=3, repeat=20):
-    # warmup
     for _ in range(warmup):
         fn(); _sync_cuda()
     times = []
