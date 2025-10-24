@@ -6,3 +6,12 @@ tqdm
 pillow
 opencv-python
 pyyaml
+ultralytics
+pathlib
+collections
+matplotlib
+albumentations
+glob
+roboflow
+dotenv
+random

@@ -55,7 +55,6 @@ transform = A.Compose([
 ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
 
 # --- 2. HÀM AUGMENTATION (Không đổi) ---
-# HÃY THAY THẾ HÀM CŨ BẰNG HÀM NÀY
 
 def augment_single_file(image_path, label_path, output_image_dir, output_label_dir, base_name, num_augmentations):
     try:
@@ -85,7 +84,6 @@ def augment_single_file(image_path, label_path, output_image_dir, output_label_d
             full_label_path = os.path.join(output_label_dir, new_label_name)
 
             # Lưu ảnh
-            # <--- THAY ĐỔI DUY NHẤT Ở ĐÂY: Sửa COLOR_RGB_BGR thành COLOR_RGB2BGR
             cv2.imwrite(full_image_path, cv2.cvtColor(augmented['image'], cv2.COLOR_RGB2BGR))
 
             # Lưu label
@@ -129,7 +127,7 @@ def process_target_class(image_dir, label_dir, target_class_id, num_per_image):
         
         if contains_target:
             found_count += 1
-            print(f"\n[Bước 2] ✅ TÌM THẤY CLASS {target_class_id} trong file '{base_name}.txt'")
+            print(f"\n[Bước 2] TÌM THẤY CLASS {target_class_id} trong file '{base_name}.txt'")
             
             # Tìm ảnh tương ứng (thử nhiều định dạng)
             image_path = None
@@ -152,7 +150,6 @@ def process_target_class(image_dir, label_dir, target_class_id, num_per_image):
 
 # --- CẤU HÌNH VÀ CHẠY ---
 if __name__ == '__main__':
-    # !!! --- VUI LÒNG KIỂM TRA LẠI CÁC ĐƯỜNG DẪN NÀY --- !!!
     TRAIN_IMAGE_DIR = '../datasets/processed/processed_train/images'
     TRAIN_LABEL_DIR = '../datasets/processed/processed_train/labels'
     
