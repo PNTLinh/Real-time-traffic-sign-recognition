@@ -54,8 +54,7 @@ traffic-sign-system/
 └── README.md
 
 ### Đặc tả dữ liệu
-Bộ dữ liệu biển báo giao thông Việt Nam(vietnam-traffic-sign-vr1a7-ecrhf-xasim) có số lượng là 545 gồm 19 classes: 
-Cấm đỗ xe, Cấm dừng đỗ xe, Cấm ngược chiều, Cấm ô tô, Cấm quay đầu, Cấm rẽ phải, Cấm rẽ trái, Dừng lại, Đường không bằng phẳng,Đường không ưu tiên, Đường ưu tiên, Người đi bộ, Tốc độ 30, Tốc độ 40, Tốc độ 50, Tốc độ 60, Tốc độ 80, Trẻ em qua đường, Vòng xuyến.
+Bộ dữ liệu biển báo giao thông Việt Nam(vietnam-traffic-sign-vr1a7-ecrhf-xasim) có số lượng là 545 gồm 19 classes: Cấm đỗ xe, Cấm dừng đỗ xe, Cấm ngược chiều, Cấm ô tô, Cấm quay đầu, Cấm rẽ phải, Cấm rẽ trái, Dừng lại, Đường không bằng phẳng,Đường không ưu tiên, Đường ưu tiên, Người đi bộ, Tốc độ 30, Tốc độ 40, Tốc độ 50, Tốc độ 60, Tốc độ 80, Trẻ em qua đường, Vòng xuyến.
 
 Sau khi loại đi class hiếm, sử dụng các loại augmentation như: lật ngang, dọc, xoay, dịch, phóng to, thu nhỏ, cắt ảnh, thay đổi độ sáng, độ tương phản, thay đổi kênh màu, dùng Gaussian làm nhiễu mờ với xác suất khác nhau.
 Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
@@ -68,6 +67,14 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
    - <width>: Chiều rộng của bounding box.
    - <height>: Chiều cao của bounding box.
 
+### Cách thực hiện 
+1. Clone và tải các phụ thuộc
+!git clone https://github.com/PNTLinh/Real-time-traffic-sign-recognition.git
+%cd Real-time-traffic-sign-recognition
+!pip install -r requirements.txt
+2. Kiểm tra & chỉnh config.yaml
+3. Huấn luyện YOLOv12
+python C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\models\yolo_detector.py
 
 
 
