@@ -70,7 +70,9 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
 
 
 
-
+### Hướng dẫn chạy mô hình yolo
+- Thử nghiệm trên ảnh/video: models/huong_dan_su_dung_model_yolo.py
+- Thử nghiệm trên webcam: pipeline/webcam.py
 
 
 
