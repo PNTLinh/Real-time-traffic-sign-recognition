@@ -77,7 +77,9 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
 python C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\models\yolo_detector.py
 
 
-
+### Hướng dẫn chạy mô hình yolo
+- Thử nghiệm trên ảnh/video: models/huong_dan_su_dung_model_yolo.py
+- Thử nghiệm trên webcam: pipeline/webcam.py
 
 
 
