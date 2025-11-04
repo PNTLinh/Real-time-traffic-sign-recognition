@@ -2,7 +2,10 @@ import os
 from pathlib import Path
 from collections import Counter
 import matplotlib.pyplot as plt
-
+import cv2
+import albumentations as A
+import os
+import glob
 # Thư mục chứa file label
 label_dir = Path("../datasets/processed/processed_train/labels")
 
@@ -39,11 +42,6 @@ print(f"✅ Biểu đồ đã được lưu tại: {output_path}")
 plt.show()
 
 
-
-import cv2
-import albumentations as A
-import os
-import glob
 
 # --- 1. ĐỊNH NGHĨA CÁC PHÉP BIẾN ĐỔI (Không đổi) ---
 transform = A.Compose([
