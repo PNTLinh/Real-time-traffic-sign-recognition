@@ -11,8 +11,9 @@ traffic-sign-system/
 ├── data/                          # Quản lý dữ liệu
 │   ├── loader.py                 # Load dataset, video
 │   ├── preprocess.py             # Tiền xử lý ảnh cho cả vlm và yolo
-│   └── augmentation.py           # Data augmentation
-│
+│   ├── augmentation.py           # Data augmentation
+│   ├── test                      # Data thử nghiệm thực tế
+|   └── statistic                 # Thống kê dữ liệu
 ├── models/                        # Models
 │   ├── yolo_detector.py          # YOLO detection
 │   ├── vlm_classifier.py         # VLM classification
@@ -25,7 +26,8 @@ traffic-sign-system/
 ├── evaluation/                    # Đánh giá
 │   ├── metrics.py                # Tính mAP, Precision, Recall
 │   ├── evaluate.py               # Đánh giá models
-│   └── benchmark.py              # Đo FPS, latency
+│   ├── benchmark.py              # Đo FPS, latency
+|   └── latency_yolo.py           # Đo latency của yolo
 │
 ├── utils/                         # Tiện ích
 │   ├── logger.py                   # Vẽ kết quả
