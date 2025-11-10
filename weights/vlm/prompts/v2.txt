@@ -1,0 +1,6 @@
+dấu hiệu cấm/hiệu lệnh: {}
+biển cảnh báo giao thông: {}
+biển chỉ dẫn giao thông: {}
+cận cảnh biển báo: {}
+high quality traffic sign: {}
+road traffic sign picture: {}

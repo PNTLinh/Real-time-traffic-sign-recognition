@@ -1,0 +1,29 @@
+# configs/config.yaml
+device: auto   # auto|cuda|cpu
+
+video:
+  source: 0           # 0 = webcam; hoặc đường dẫn file/video stream
+  display: true
+  save_out: false
+  out_path: outputs/traffic_demo.mp4
+  writer_fps: 25
+
+yolo:
+  weights: weights/yolo/best.pt   # thay bằng file của bạn
+  img_size: 640
+  conf_thres: 0.25
+  iou_thres: 0.45
+  max_det: 50
+  classes: null                   # hoặc danh sách id, ví dụ: [0,1,2]
+
+vlm:
+  enabled: true
+  config_json: weights/vlm/config.json
+  min_crop_edge: 12     # bỏ qua bbox quá nhỏ (<12 px)
+  fuse_strategy: consensus   # yolo_only|vlm_only|and|consensus
+  consensus_threshold: 0.60  # nếu VLM score >= ngưỡng này thì ghi đè nhãn YOLO
+
+draw:
+  show_yolo: true
+  show_vlm: true
+  show_fps: true

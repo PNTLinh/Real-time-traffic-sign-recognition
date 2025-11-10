@@ -1,0 +1,8 @@
+biển báo giao thông: {}
+biển báo đường bộ Việt Nam: {}
+ảnh chụp biển báo giao thông: {}
+dấu hiệu giao thông trên đường: {}
+Vietnam traffic sign: {}
+road sign: {}
+photo of a traffic sign: {}
+clear close-up of a traffic sign: {}

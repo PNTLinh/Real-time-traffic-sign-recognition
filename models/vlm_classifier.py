@@ -1,159 +1,227 @@
+# models/vlm_classifier.py
+# -*- coding: utf-8 -*-
+from __future__ import annotations
 import os
-from typing import List, Dict, Tuple, Optional
+from typing import List, Tuple, Dict, Sequence, Optional
 
 import torch
-import torch.nn.functional as F
+import numpy as np
 from PIL import Image
-import open_clip  
-import yaml
+
+try:
+    import open_clip
+except Exception as e:
+    raise ImportError(
+        "Yêu cầu 'open-clip-torch'. Cài đặt: pip install open-clip-torch"
+    ) from e
+
+
+# ====== Danh sách lớp (ID ↔ tên) ======
+VIETNAMESE_LABELS: List[str] = [
+    "Cấm đỗ xe",
+    "Cấm dừng đỗ xe",
+    "Cấm ngược chiều",
+    "Cấm ô tô",
+    "Cấm quay đầu",
+    "Cấm rẽ phải",
+    "Cấm rẽ trái",
+    "Dừng lại",
+    "Đường không bằng phẳng",
+    "Đường không ưu tiên",
+    "Đường ưu tiên",
+    "Người đi bộ",
+    "Tốc độ 30",
+    "Tốc độ 40",
+    "Tốc độ 50",
+    "Tốc độ 60",
+    "Tốc độ 80",
+    "Trẻ em qua đường",
+    "Vòng xuyến",
+]
+
+# Một vài template tiếng Việt/Anh để zero-shot robust hơn
+DEFAULT_TEMPLATES_VI = [
+    "biển báo giao thông: {}",
+    "biển báo đường bộ Việt Nam: {}",
+    "ảnh chụp biển báo: {}",
+    "dấu hiệu giao thông: {}",
+]
+DEFAULT_TEMPLATES_EN = [
+    "traffic sign: {}",
+    "road sign: {}",
+    "Vietnam traffic sign: {}",
+    "photo of a traffic sign: {}",
+]
+
 
 class VLMClassifier:
     """
-    Phân loại crop (biển báo) bằng CLIP/OpenCLIP.
-    - Tiền xử lý text: tạo embedding cho mỗi lớp từ template prompt.
-    - Inference: encode crop -> so khớp cosine với text embeddings.
+    Trình bao cho OpenCLIP: sinh text features từ label, so khớp cosine với image features.
+    Hỗ trợ:
+      - set_labels() để đổi danh sách lớp
+      - classify_image() cho 1 ảnh/crop
+      - classify_detections() nhận list bbox (pixel) để phân loại các hộp từ YOLO
+      - batched_predict() batch ảnh
     """
 
     def __init__(
         self,
-        class_names: Optional[List[str]] = None,
-        templates: Optional[List[str]] = None,
         model_name: str = "ViT-B-32",
         pretrained: str = "laion2b_s34b_b79k",
         device: Optional[str] = None,
-        cache_path: Optional[str] = None,
-    ) -> None:
-        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        use_half: bool = True,
+        labels: Optional[List[str]] = None,
+        templates_vi: Optional[List[str]] = None,
+        templates_en: Optional[List[str]] = None,
+    ):
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=pretrained, device=self.device
         )
         self.tokenizer = open_clip.get_tokenizer(model_name)
+        self.use_half = use_half and (self.device.startswith("cuda"))
+        if self.use_half:
+            self.model = self.model.half()
 
-        self.class_names = class_names or []
-        self.templates = templates or [
-            "a photo of a traffic sign: {}",
-            "a road sign that indicates {}",
-            "a pictogram of {} traffic sign",
-            "a sign saying {}",
-        ]
+        self.labels = labels or VIETNAMESE_LABELS
+        self.templates_vi = templates_vi or DEFAULT_TEMPLATES_VI
+        self.templates_en = templates_en or DEFAULT_TEMPLATES_EN
 
-        self.cache_path = cache_path  # file .pt để cache text embeddings
-        self.text_features = None  # Tensor [C, D], đã L2-normalize
+        self.text_features: Optional[torch.Tensor] = None
+        self._build_text_features()
 
-        if self.class_names:
-            self.build_text_features(self.class_names, self.templates)
+    # ---------- Feature builders ----------
+    def _build_text_features(self):
+        prompts: List[str] = []
+        for name in self.labels:
+            for t in self.templates_vi:
+                prompts.append(t.format(name))
+            for t in self.templates_en:
+                prompts.append(t.format(name))
 
-    @staticmethod
-    def load_names_from_yaml(yaml_path: str) -> List[str]:
-        """
-        Đọc danh sách lớp từ datasets/data.yaml (YOLO format).
-        Trả về list[str] theo thứ tự id.
-        """
-        with open(yaml_path, "r", encoding="utf-8") as f:
-            y = yaml.safe_load(f)
-        names = y.get("names")
-        if isinstance(names, dict):
-            names = [names[k] for k in sorted(names.keys(), key=lambda x: int(x))]
-        assert isinstance(names, list),"names trong YAML phải là list hoặc dict"
-        return [str(n) for n in names]
-
-    @staticmethod
-    def _normalize(x: torch.Tensor) -> torch.Tensor:
-        return x / (x.norm(dim=-1, keepdim=True) + 1e-12)
-
-    def _encode_text_prompts(self, prompts: List[str]) -> torch.Tensor:
         tokens = self.tokenizer(prompts)
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=self.device.type == "cuda"):
-            feats = self.model.encode_text(tokens.to(self.device))
-        return self._normalize(feats.float())
+        tokens = tokens.to(self.device)
 
-    def build_text_features(self, class_names: List[str], templates: Optional[List[str]] = None) -> None:
-        """
-        Tạo embedding văn bản cho từng lớp bằng nhiều template rồi average.
-        Lưu cache nếu có cache_path.
-        """
-        templates = templates or self.templates
-        cache_ok = False
+        with torch.no_grad():
+            if self.use_half:
+                tokens = tokens  # tokenizer already int64
+            txt = self.model.encode_text(tokens)
+            txt = txt / txt.norm(dim=-1, keepdim=True)
 
-        if self.cache_path and os.path.exists(self.cache_path):
-            try:
-                data = torch.load(self.cache_path, map_location=self.device)
-                if isinstance(data, dict) and data.get("class_names") == class_names:
-                    self.text_features = data["text_features"].to(self.device)
-                    cache_ok = True
-            except Exception:
-                pass
+        # gom lại theo lớp (mean pooling các template)
+        per_class_feats = []
+        n_template = len(self.templates_vi) + len(self.templates_en)
+        for i in range(len(self.labels)):
+            s = i * n_template
+            e = s + n_template
+            per_class_feats.append(txt[s:e].mean(dim=0))
+        self.text_features = torch.stack(per_class_feats, dim=0)  # (C, D)
 
-        if not cache_ok:
-            all_feats = []
-            for cls in class_names:
-                prompts = [t.format(cls) for t in templates]
-                feats = self._encode_text_prompts(prompts)  # [T, D]
-                feats = self._normalize(feats.mean(dim=0, keepdim=True))  # [1, D]
-                all_feats.append(feats)
-            self.text_features = torch.cat(all_feats, dim=0)  # [C, D]
-
-            if self.cache_path:
-                os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
-                torch.save({"class_names": class_names, "text_features": self.text_features.cpu()}, self.cache_path)
-
-        self.class_names = class_names
+    def set_labels(
+        self,
+        labels: List[str],
+        templates_vi: Optional[List[str]] = None,
+        templates_en: Optional[List[str]] = None,
+    ):
+        self.labels = labels
+        if templates_vi is not None:
+            self.templates_vi = templates_vi
+        if templates_en is not None:
+            self.templates_en = templates_en
+        self._build_text_features()
 
     # ---------- Inference ----------
-    def _encode_image(self, img_pil: Image.Image) -> torch.Tensor:
-        img = self.preprocess(img_pil).unsqueeze(0).to(self.device)
-        with torch.no_grad(), torch.cuda.amp.autocast(enabled=self.device.type == "cuda"):
-            feats = self.model.encode_image(img)
-        return self._normalize(feats.float())  # [1, D]
+    def _to_tensor(self, image: Image.Image) -> torch.Tensor:
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        img = self.preprocess(image).unsqueeze(0).to(self.device)
+        if self.use_half:
+            img = img.half()
+        return img
 
-    def predict_crops(
+    @torch.inference_mode()
+    def classify_image(
+        self, image: Image.Image, topk: int = 3, return_probs: bool = True
+    ) -> Dict:
+        """
+        Trả về lớp dự đoán cho một ảnh (crop).
+        """
+        assert self.text_features is not None, "Text features chưa sẵn sàng."
+        img = self._to_tensor(image)
+        img_feat = self.model.encode_image(img)
+        img_feat = img_feat / img_feat.norm(dim=-1, keepdim=True)  # (1, D)
+
+        # cosine sim → logits
+        logits = (img_feat @ self.text_features.T).squeeze(0)  # (C,)
+        probs = logits.softmax(dim=-1)
+
+        topk = min(topk, len(self.labels))
+        vals, inds = probs.topk(topk, dim=-1)
+        result = {
+            "topk_indices": inds.tolist(),
+            "topk_labels": [self.labels[i] for i in inds.tolist()],
+            "topk_scores": vals.tolist() if return_probs else None,
+            "pred_index": int(inds[0].item()),
+            "pred_label": self.labels[int(inds[0].item())],
+            "pred_score": float(vals[0].item()) if return_probs else None,
+            "logits": logits.float().cpu().numpy(),
+        }
+        return result
+
+    @torch.inference_mode()
+    def batched_predict(
+        self, images: Sequence[Image.Image], topk: int = 3
+    ) -> List[Dict]:
+        if len(images) == 0:
+            return []
+        batch = torch.cat([self._to_tensor(im) for im in images], dim=0)
+        img_feat = self.model.encode_image(batch)
+        img_feat = img_feat / img_feat.norm(dim=-1, keepdim=True)  # (N, D)
+
+        logits = img_feat @ self.text_features.T  # (N, C)
+        probs = logits.softmax(dim=-1)
+        topk = min(topk, len(self.labels))
+        vals, inds = probs.topk(topk, dim=-1)
+
+        out: List[Dict] = []
+        for i in range(len(images)):
+            idxs = inds[i].tolist()
+            scs = vals[i].tolist()
+            out.append(
+                {
+                    "topk_indices": idxs,
+                    "topk_labels": [self.labels[j] for j in idxs],
+                    "topk_scores": scs,
+                    "pred_index": int(idxs[0]),
+                    "pred_label": self.labels[int(idxs[0])],
+                    "pred_score": float(scs[0]),
+                    "logits": logits[i].float().cpu().numpy(),
+                }
+            )
+        return out
+
+    # ---------- Integration with detector ----------
+    def classify_detections(
         self,
-        image: Image.Image,
-        boxes_xyxy: List[Tuple[float, float, float, float]],
-        expand: float = 0.08,
-        topk: int = 1,
+        image_bgr: np.ndarray,
+        bboxes_xyxy: Sequence[Sequence[float]],
+        topk: int = 3,
     ) -> List[Dict]:
         """
-        Phân loại cho danh sách crop từ ảnh gốc.
-        boxes_xyxy: [(x1,y1,x2,y2), ...] theo pixel.
-        expand: nới rộng box (tỷ lệ cạnh) để lấy đủ bối cảnh.
-        Trả về: list dict {bbox, cls_id, cls_name, score}
+        Nhận ảnh BGR (numpy, như từ OpenCV) và danh sách bbox [x1,y1,x2,y2] (pixel).
+        Trả về list kết quả VLM theo thứ tự bbox.
         """
-        assert self.text_features is not None, "Chưa build_text_features (chưa có class_names)"
-        w, h = image.size
-        results = []
-
-        for (x1, y1, x2, y2) in boxes_xyxy:
-            # nới box
-            cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
-            bw, bh = (x2 - x1), (y2 - y1)
-            bw, bh = bw * (1 + expand), bh * (1 + expand)
-            nx1, ny1 = max(0, int(cx - bw / 2)), max(0, int(cy - bh / 2))
-            nx2, ny2 = min(w, int(cx + bw / 2)), min(h, int(cy + bh / 2))
-
-            crop = image.crop((nx1, ny1, nx2, ny2))
-            img_feat = self._encode_image(crop)  # [1, D]
-
-            # Cosine similarity với text features
-            logits = (img_feat @ self.text_features.t()).squeeze(0)  # [C]
-            probs = logits.softmax(dim=-1)
-
-            if topk == 1:
-                score, cls_id = probs.max(dim=-1)
-                results.append({
-                    "bbox": (x1, y1, x2, y2),
-                    "cls_id": int(cls_id.item()),
-                    "cls_name": self.class_names[int(cls_id)],
-                    "score": float(score.item())
-                })
+        # Chuyển sang PIL & crop
+        img_rgb = Image.fromarray(image_bgr[:, :, ::-1])  # BGR -> RGB
+        crops: List[Image.Image] = []
+        W, H = img_rgb.size
+        for (x1, y1, x2, y2) in bboxes_xyxy:
+            x1 = max(0, int(round(x1)))
+            y1 = max(0, int(round(y1)))
+            x2 = min(W, int(round(x2)))
+            y2 = min(H, int(round(y2)))
+            if x2 <= x1 or y2 <= y1:
+                crops.append(img_rgb)  # fallback
             else:
-                score, cls_id = probs.topk(topk, dim=-1)
-                results.append({
-                    "bbox": (x1, y1, x2, y2),
-                    "topk": [
-                        {"cls_id": int(i), "cls_name": self.class_names[int(i)], "score": float(s)}
-                        for s, i in zip(score.tolist(), cls_id.tolist())
-                    ]
-                })
-
-        return results
+                crops.append(img_rgb.crop((x1, y1, x2, y2)))
+        return self.batched_predict(crops, topk=topk)

@@ -1,168 +1,87 @@
-# evaluation/evaluate.py
+"""
+Đánh giá VLM trên các crop GT theo định dạng nhãn YOLO:
+mỗi ảnh có file .txt: <class_id> <x_center> <y_center> <w> <h> (chuẩn hoá 0..1)
+Script sẽ crop vùng GT, chạy VLM zero-shot, rồi in Accuracy/Top-k/F1.
+"""
 from __future__ import annotations
-from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Iterable
+import os, glob
+from typing import List, Tuple
 import numpy as np
 from PIL import Image
+import cv2
 
-from .metrics import (
-    DetGT, DetPred, detection_map,
-    accuracy, precision_recall_f1, confusion_matrix
-)
+from models.vlm_classifier import VLMClassifier
+from evaluation.metrics import evaluate_classification
 
-# ===== Adapters (bạn cắm model thật của mình vào đây) =====
 
-class YOLOv12Detector:
-    """Adapter đơn giản cho YOLOv12. Bạn thay .detect(...) bằng code thật."""
-    def __init__(self, model_path: str, conf_thres: float = 0.25):
-        self.conf_thres = conf_thres
-        # TODO: load model tại đây
+def load_yolo_label(label_path: str, W: int, H: int) -> List[Tuple[int, List[int]]]:
+    boxes = []
+    with open(label_path, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) != 5:
+                continue
+            cid = int(parts[0])
+            xc, yc, w, h = map(float, parts[1:])
+            x1 = int((xc - w / 2) * W)
+            y1 = int((yc - h / 2) * H)
+            x2 = int((xc + w / 2) * W)
+            y2 = int((yc + h / 2) * H)
+            boxes.append((cid, [x1, y1, x2, y2]))
+    return boxes
 
-    def detect(self, image: Image.Image) -> List[Dict[str, Any]]:
-        """
-        Return: list[ { 'bbox':[x1,y1,x2,y2], 'score':float, 'cls':int } ]
-        Toạ độ theo ảnh gốc.
-        """
-        # TODO: trả kết quả thật
-        return []
 
-class VLMClassifier:
-    """Adapter cho VLM (phân loại/QA trên crop)."""
-    def __init__(self, prompt: str = "Classify this object"):
-        self.prompt = prompt
-        # TODO: init VLM
+def main(images_dir: str):
+    vlm = VLMClassifier()  # ViT-B/32, laion2b
+    y_true, logits_all = [], []
 
-    def classify(self, crop: Image.Image) -> Dict[str, Any]:
-        """
-        Return: {'label': int, 'score': float, 'text': 'optional answer'}
-        """
-        # TODO: trả kết quả thật
-        return {"label": 0, "score": 1.0, "text": ""}
+    image_paths = sorted(
+        glob.glob(os.path.join(images_dir, "**", "*.jpg"), recursive=True)
+        + glob.glob(os.path.join(images_dir, "**", "*.png"), recursive=True)
+        + glob.glob(os.path.join(images_dir, "**", "*.jpeg"), recursive=True)
+    )
+    for img_path in image_paths:
+        lab_path = os.path.splitext(img_path)[0] + ".txt"
+        if not os.path.exists(lab_path):
+            continue
+        img = cv2.imread(img_path)
+        if img is None:
+            continue
+        H, W = img.shape[:2]
+        items = load_yolo_label(lab_path, W, H)
+        if not items:
+            continue
 
-# ===== Dataset interface =====
+        crops = []
+        gts = []
+        pil_rgb = Image.fromarray(img[:, :, ::-1])
+        for cid, (x1, y1, x2, y2) in items:
+            x1 = max(0, x1); y1 = max(0, y1)
+            x2 = min(W, x2); y2 = min(H, y2)
+            if x2 <= x1 or y2 <= y1:
+                continue
+            crops.append(pil_rgb.crop((x1, y1, x2, y2)))
+            gts.append(cid)
 
-@dataclass
-class Sample:
-    image_id: str
-    image_path: str
-    gt_boxes: np.ndarray       # [N,4] xyxy
-    gt_labels: List[int]       # [N]
-    # optional: ground-truth text/answers per box or per image if dùng VQA
+        if not crops:
+            continue
 
-class SimpleFolderDataset:
-    """
-    Ví dụ dataset đơn giản.
-    Bạn tự viết loader thật: đọc từ COCO-style JSON, CSV, hay folder riêng.
-    """
-    def __init__(self, samples: List[Sample]):
-        self.samples = samples
+        outs = vlm.batched_predict(crops, topk=5)
+        y_true.extend(gts)
+        logits_all.extend([o["logits"] for o in outs])
 
-    def __len__(self): return len(self.samples)
-    def __iter__(self):
-        for s in self.samples:
-            yield s
+    if len(y_true) == 0:
+        print("Không có dữ liệu hợp lệ.")
+        return
 
-# ===== Evaluator =====
+    logits = np.stack(logits_all, axis=0)
+    report = evaluate_classification(logits, y_true, ks=(1, 3, 5))
+    print(f"Samples: {report['support']}")
+    print(f"Accuracy: {report['accuracy']:.4f} | Top1: {report['top1']:.4f} | Top3: {report['top3']:.4f} | Top5: {report['top5']:.4f}")
+    print(f"Macro F1: {report['macro_f1']:.4f} | Micro F1: {report['micro_f1']:.4f} | Weighted F1: {report['weighted_f1']:.4f}")
+    # Nếu cần: print(report['per_class']) hoặc lưu confusion_matrix
 
-class Evaluator:
-    def __init__(
-        self,
-        detector: YOLOv12Detector,
-        vlm: VLMClassifier,
-        class_names: List[str],
-        iou_thresholds: Iterable[float] = (0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95),
-        det_conf_thres: float = 0.25
-    ):
-        self.detector = detector
-        self.vlm = vlm
-        self.class_names = class_names
-        self.iou_thresholds = list(iou_thresholds)
-        self.det_conf_thres = det_conf_thres
 
-    @staticmethod
-    def _crop(image: Image.Image, box: List[float]) -> Image.Image:
-        x1,y1,x2,y2 = [int(round(v)) for v in box]
-        x1 = max(0, x1); y1 = max(0, y1)
-        x2 = min(image.width-1, x2); y2 = min(image.height-1, y2)
-        return image.crop((x1,y1,x2,y2))
-
-    def evaluate(self, dataset: SimpleFolderDataset, save_jsonl: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Chạy pipeline YOLO → VLM end-to-end và tính:
-        - Detection: mAP@[.50:.95]
-        - Classification: accuracy, macro/micro precision/recall/f1, confusion matrix
-        """
-        gt_list: List[DetGT] = []
-        pred_list: List[DetPred] = []
-        cls_labels_all: List[int] = []
-        cls_preds_all: List[int] = []
-
-        import json
-        jf = open(save_jsonl, "w", encoding="utf-8") if save_jsonl else None
-
-        for sample in dataset:
-            img = Image.open(sample.image_path).convert("RGB")
-            dets = self.detector.detect(img)  # [{'bbox':..., 'score':..., 'cls':...}, ...]
-
-            # lọc theo conf
-            dets = [d for d in dets if d.get("score", 0.0) >= self.det_conf_thres]
-
-            # VLM phân loại từng bbox (nếu YOLO không có nhãn hoặc muốn refine)
-            pred_boxes, pred_scores, pred_labels = [], [], []
-            for d in dets:
-                crop = self._crop(img, d["bbox"])
-                cls_res = self.vlm.classify(crop)
-                label = int(cls_res.get("label", d.get("cls", -1)))
-                score = float(min(max(cls_res.get("score", d.get("score", 0.0)), 0.0), 1.0))
-                pred_boxes.append(d["bbox"])
-                pred_scores.append(score)
-                pred_labels.append(label)
-
-                # thu thập cho classification metrics nếu có GT mapping 1-1 theo box
-                # (ở đây đơn giản: ghép theo IOU max > 0.5 với GT để lấy label thật)
-            if len(pred_boxes) == 0:
-                pred_boxes = np.zeros((0,4), dtype=np.float32)
-                pred_scores = np.zeros((0,), dtype=np.float32)
-            else:
-                pred_boxes = np.array(pred_boxes, dtype=np.float32)
-                pred_scores = np.array(pred_scores, dtype=np.float32)
-
-            # Push detection GT/PRED
-            gt_list.append(DetGT(sample.image_id, sample.gt_boxes, sample.gt_labels))
-            pred_list.append(DetPred(sample.image_id, pred_boxes, pred_scores, pred_labels))
-
-            # Gom nhãn cho classification accuracy bằng cách match gần nhất IOU>=0.5
-            if len(sample.gt_boxes) and len(pred_boxes):
-                from .metrics import box_iou_xyxy
-                iou_mat = box_iou_xyxy(sample.gt_boxes, pred_boxes)
-                for gi in range(iou_mat.shape[0]):
-                    pj = int(np.argmax(iou_mat[gi]))
-                    if iou_mat[gi, pj] >= 0.5:
-                        cls_labels_all.append(int(sample.gt_labels[gi]))
-                        cls_preds_all.append(int(pred_labels[pj]))
-
-            if jf:
-                jf.write(json.dumps({
-                    "image_id": sample.image_id,
-                    "pred": [{"bbox": b, "score": float(s), "label": int(l)} for b,s,l in zip(pred_boxes.tolist(), pred_scores.tolist(), pred_labels)],
-                    "gt": [{"bbox": b, "label": int(l)} for b,l in zip(sample.gt_boxes.tolist(), sample.gt_labels)]
-                }, ensure_ascii=False) + "\n")
-
-        if jf: jf.close()
-
-        # ---- Metrics ----
-        det_report = detection_map(gt_list, pred_list, class_ids=range(len(self.class_names)), iou_thresholds=self.iou_thresholds)
-
-        cls_report = {}
-        if cls_labels_all:
-            cls_report["accuracy"] = accuracy(cls_labels_all, cls_preds_all)
-            cls_report.update(precision_recall_f1(cls_labels_all, cls_preds_all, num_classes=len(self.class_names)))
-            cls_report["confusion_matrix"] = confusion_matrix(cls_labels_all, cls_preds_all, len(self.class_names)).tolist()
-
-        report = {"detection": det_report, "classification": cls_report, "num_images": len(dataset)}
-        print(json_pretty(report))
-        return report
-
-def json_pretty(o: Any) -> str:
-    import json
-    return json.dumps(o, indent=2, ensure_ascii=False)
+if __name__ == "__main__":
+    import sys
+    main(sys.argv[1] if len(sys.argv) > 1 else "datasets/val")

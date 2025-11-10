@@ -1,1 +1,28 @@
-# VLM configuration
+{
+  "model_name": "ViT-B-32",
+  "pretrained": "laion2b_s34b_b79k",
+  "use_half": true,
+  "topk": 3,
+  "prompt_file": "weights/vlm/prompts/best.txt",
+  "labels": [
+    "Cấm đỗ xe",
+    "Cấm dừng đỗ xe",
+    "Cấm ngược chiều",
+    "Cấm ô tô",
+    "Cấm quay đầu",
+    "Cấm rẽ phải",
+    "Cấm rẽ trái",
+    "Dừng lại",
+    "Đường không bằng phẳng",
+    "Đường không ưu tiên",
+    "Đường ưu tiên",
+    "Người đi bộ",
+    "Tốc độ 30",
+    "Tốc độ 40",
+    "Tốc độ 50",
+    "Tốc độ 60",
+    "Tốc độ 80",
+    "Trẻ em qua đường",
+    "Vòng xuyến"
+  ]
+}
