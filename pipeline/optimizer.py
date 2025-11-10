@@ -1,7 +1,6 @@
 from ultralytics import YOLO
 
-# Nạp model YOLOv12
-model = YOLO(r"C:\Users\Admin\OneDrive\Desktop\deeplearning_project\Real-time-traffic-sign-recognition\weights\yolo\best.pt")
+model = YOLO(r"local_root\weights\yolo\best.pt")
 
 # Xuất sang ONNX
 model.export(

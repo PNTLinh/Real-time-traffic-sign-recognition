@@ -1,5 +1,3 @@
-# utils/logger.py
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 import os, sys, time, math, logging
 from typing import List, Sequence, Tuple, Optional
@@ -7,7 +5,6 @@ import numpy as np
 import cv2
 
 
-# =============== Logging ===============
 def setup_logger(
     name: str = "traffic-sign",
     save_dir: str = "outputs/logs",
@@ -39,8 +36,6 @@ def setup_logger(
 
     return logger
 
-
-# =============== Vẽ/hiển thị ===============
 def _text_size(text: str, font_scale: float = 0.6, thickness: int = 1):
     return cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
 

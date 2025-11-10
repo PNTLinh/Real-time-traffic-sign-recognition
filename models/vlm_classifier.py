@@ -1,5 +1,3 @@
-# models/vlm_classifier.py
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 import os
 from typing import List, Tuple, Dict, Sequence, Optional
@@ -15,8 +13,6 @@ except Exception as e:
         "Yêu cầu 'open-clip-torch'. Cài đặt: pip install open-clip-torch"
     ) from e
 
-
-# ====== Danh sách lớp (ID ↔ tên) ======
 VIETNAMESE_LABELS: List[str] = [
     "Cấm đỗ xe",
     "Cấm dừng đỗ xe",
@@ -39,7 +35,6 @@ VIETNAMESE_LABELS: List[str] = [
     "Vòng xuyến",
 ]
 
-# Một vài template tiếng Việt/Anh để zero-shot robust hơn
 DEFAULT_TEMPLATES_VI = [
     "biển báo giao thông: {}",
     "biển báo đường bộ Việt Nam: {}",
@@ -90,7 +85,6 @@ class VLMClassifier:
         self.text_features: Optional[torch.Tensor] = None
         self._build_text_features()
 
-    # ---------- Feature builders ----------
     def _build_text_features(self):
         prompts: List[str] = []
         for name in self.labels:
@@ -104,18 +98,17 @@ class VLMClassifier:
 
         with torch.no_grad():
             if self.use_half:
-                tokens = tokens  # tokenizer already int64
+                tokens = tokens  
             txt = self.model.encode_text(tokens)
             txt = txt / txt.norm(dim=-1, keepdim=True)
 
-        # gom lại theo lớp (mean pooling các template)
         per_class_feats = []
         n_template = len(self.templates_vi) + len(self.templates_en)
         for i in range(len(self.labels)):
             s = i * n_template
             e = s + n_template
             per_class_feats.append(txt[s:e].mean(dim=0))
-        self.text_features = torch.stack(per_class_feats, dim=0)  # (C, D)
+        self.text_features = torch.stack(per_class_feats, dim=0)  
 
     def set_labels(
         self,
@@ -130,7 +123,6 @@ class VLMClassifier:
             self.templates_en = templates_en
         self._build_text_features()
 
-    # ---------- Inference ----------
     def _to_tensor(self, image: Image.Image) -> torch.Tensor:
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -200,7 +192,6 @@ class VLMClassifier:
             )
         return out
 
-    # ---------- Integration with detector ----------
     def classify_detections(
         self,
         image_bgr: np.ndarray,

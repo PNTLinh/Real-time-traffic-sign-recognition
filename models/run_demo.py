@@ -82,7 +82,7 @@ def main():
     ap.add_argument("--save-dir", default="outputs/pipeline")
     ap.add_argument("--conf", type=float, default=0.25)
     ap.add_argument("--imgsz", type=int, default=640)
-    ap.add_argument("--device", default="0")  # 'cpu' hoặc '0'
+    ap.add_argument("--device", default="cpu")  # 'cpu' hoặc '0'
     ap.add_argument("--use-vlm", action="store_true")
     ap.add_argument("--vlm-model", default="ViT-B-32")
     ap.add_argument("--vlm-pretrained", default="laion2b_s34b_b79k")
@@ -94,7 +94,7 @@ def main():
         model = YOLO(args.weights)
     except Exception:
         print(f"[!] Không load được {args.weights}, fallback sang yolo11n.pt")
-        model = YOLO("C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\weights\yolo\best.pt") 
+        model = YOLO("local_root\weights\yolo\best.pt") 
 
     names = load_names(args.data)
     vlm = None
@@ -104,12 +104,12 @@ def main():
             model_name=args.vlm_model,
             pretrained=args.vlm_pretrained,
             device=None,
-            cache_path="cache/text_feats.pt"
+            #cache_path="cache/text_feats.pt"
         )
 
     save_dir = Path(args.save_dir)
     src = args.source
-    if src.isdigit():  # webcam
+    if src.isdigit():  
         run_video(model, vlm, int(src), save_dir/"webcam_pred.mp4", args.conf, args.imgsz, args.device, args.vlm_expand)
     else:
         p = Path(src)

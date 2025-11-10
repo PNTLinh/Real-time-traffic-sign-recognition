@@ -8,9 +8,9 @@ from ultralytics import YOLO
 import time
 import numpy as np 
 from tqdm import tqdm 
-MODEL_PATH = './weights/yolo/best.onnx'
+MODEL_PATH = 'local_root\weights\yolo\best.onnx'
 
-VIDEO_PATH = r'C:\Users\Admin\OneDrive\Desktop\deeplearning_project\Real-time-traffic-sign-recognition\data\test\14443854_1920_1080_60fps.mp4'
+VIDEO_PATH = r'local_root\data\test\14443854_1920_1080_60fps.mp4'
 
 DEVICE = 'cpu' # '0' de chuyen sang GPU
 
@@ -18,23 +18,23 @@ IMG_SIZE = 640
 CONF_THRESH = 0.5
 FRAME_SKIP = 2         
 SAVE_OUTPUT = True
-OUTPUT_PATH = "outputs/yolo/detect/video_output.mp4" 
+OUTPUT_PATH = "local_root/outputs/yolo/video_output.mp4" 
 
 
-WINDOW_NAME = "🔍 YOLO ONNX + Supervision (Video)"
+WINDOW_NAME = "YOLO ONNX + Supervision"
 
 
-print(f"🔹 Đang tải model ONNX: {MODEL_PATH}")
+print(f"Đang tải model ONNX: {MODEL_PATH}")
 model = YOLO(MODEL_PATH, task="detect")
 tracker = sv.ByteTrack()
 box_annotator = sv.BoxAnnotator()
 label_annotator = sv.LabelAnnotator()
 
 
-print(f"🎥 Đang mở video: {VIDEO_PATH}")
+print(f"Đang mở video: {VIDEO_PATH}")
 cap = cv2.VideoCapture(VIDEO_PATH)
 if not cap.isOpened():
-    raise Exception(f"❌ Không thể mở file video: {VIDEO_PATH}")
+    raise Exception(f"Không thể mở file video: {VIDEO_PATH}")
 
 
 w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -42,18 +42,17 @@ h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = cap.get(cv2.CAP_PROP_FPS)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-# Tính toán FPS cho video output
 output_fps = fps / FRAME_SKIP
 print(f"Thông tin video: {w}x{h}, {fps:.2f} FPS, Tổng số {total_frames} frames.")
 print(f"Video output sẽ có {output_fps:.2f} FPS (do skip {FRAME_SKIP-1} frame).")
 
 if SAVE_OUTPUT:
     out = cv2.VideoWriter(OUTPUT_PATH, cv2.VideoWriter_fourcc(*'mp4v'), output_fps, (w, h))
-    print(f"💾 Kết quả sẽ được lưu tại: {OUTPUT_PATH}")
+    print(f"Kết quả sẽ được lưu tại: {OUTPUT_PATH}")
 
 # Cho phép thay đổi kích thước cửa sổ
 cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL) 
-print("🚀 Bắt đầu xử lý... Nhấn 'q' để dừng sớm.")
+print("Bắt đầu xử lý... Nhấn 'q' để dừng sớm.")
 
 frame_count = 0
 frame_processed = 0
@@ -77,18 +76,15 @@ while True:
         break
 
     frame_count += 1
-    pbar.update(1) # Cập nhật thanh tiến trình cho mỗi frame ĐỌC
+    pbar.update(1)
 
     if frame_count % FRAME_SKIP != 0:
         continue 
 
-    # Bắt đầu đo thời gian xử lý
     proc_time_start = time.time()
     
-    # DỰ ĐOÁN
     results = model(frame, imgsz=IMG_SIZE, conf=CONF_THRESH, verbose=False)[0]
     
-    # Lấy thông tin độ trễ chi tiết từ `results.speed`
     speed_dict = results.speed 
     
     latencies_pre.append(speed_dict.get('preprocess', 0))
@@ -99,7 +95,6 @@ while True:
     detections = sv.Detections.from_ultralytics(results)
     tracked = tracker.update_with_detections(detections)
 
-    # VẼ LABEL & BOX
     class_names = results.names 
     
     if len(tracked) > 0:
@@ -124,11 +119,9 @@ while True:
     else:
         annotated_frame = frame.copy()
 
-    # Kết thúc đo thời gian xử lý
     proc_time_total_ms = (time.time() - proc_time_start) * 1000 
     latencies_loop.append(proc_time_total_ms)
 
-    # Làm mượt giá trị (tính trung bình của N frame gần nhất)
     if len(latencies_loop) > SMOOTHING_WINDOW:
         latencies_pre.pop(0)
         latencies_inf.pop(0)
@@ -140,13 +133,10 @@ while True:
     avg_post_ms = np.mean(latencies_post)
     avg_loop_ms = np.mean(latencies_loop)
     avg_loop_fps = 1000.0 / avg_loop_ms if avg_loop_ms > 0 else 0
-    # -----------------------------------------------------------
-    
-    # Cập nhật thông tin cho pbar
+  
     pbar.set_postfix_str(f"Proc FPS: {avg_loop_fps:.1f} (Inf: {avg_inf_ms:.1f}ms)")
     frame_processed += 1
 
-    # === HIỂN THỊ THÔNG SỐ (đã được làm mượt) ===
     cv2.putText(annotated_frame, f"Proc FPS: {avg_loop_fps:.1f}", (10, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     cv2.putText(annotated_frame, f"  Pre: {avg_pre_ms:.1f} ms", (10, 80),
@@ -158,7 +148,6 @@ while True:
     cv2.putText(annotated_frame, f"Skipping: {FRAME_SKIP-1} frame(s)", (10, 170),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 100, 0), 2)
 
-    # HIỂN THỊ & GHI
     cv2.imshow(WINDOW_NAME, annotated_frame)
     if SAVE_OUTPUT:
         out.write(annotated_frame)

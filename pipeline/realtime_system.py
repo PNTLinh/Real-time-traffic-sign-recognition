@@ -1,4 +1,3 @@
-# pipeline/realtime_system.py
 from ultralytics import YOLO
 import torch
 import cv2
@@ -80,8 +79,8 @@ def main(
     print(f"Done. Runtime: {time.time()-t0:.1f}s")
 
 if __name__ == "__main__":
-    WEIGHTS = "C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\weights\yolo\best.pt"
-    DATA_YAML = "C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\datasets\data.yaml"
+    WEIGHTS = "local_root\weights\yolo\best.pt"
+    DATA_YAML = "local_root\datasets\data.yaml"
     SOURCE = 0 
 
     main(WEIGHTS, DATA_YAML, SOURCE)

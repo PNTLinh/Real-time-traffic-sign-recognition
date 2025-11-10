@@ -1,11 +1,7 @@
-# evaluation/metrics.py
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 from typing import Dict, Iterable, List, Sequence, Tuple, Optional
 import numpy as np
 
-
-# ============ Classification metrics ============
 def accuracy(y_true: Sequence[int], y_pred: Sequence[int]) -> float:
     y_true = np.asarray(y_true, dtype=np.int64)
     y_pred = np.asarray(y_pred, dtype=np.int64)
@@ -131,8 +127,6 @@ def evaluate_classification(
     out.update(precision_recall_f1(y_true, y_pred))
     return out
 
-
-# ============ Retrieval (tuỳ chọn) ============
 def retrieval_recall_at_k(sim: np.ndarray, positives: List[Sequence[int]],
                           ks: Sequence[int] = (1, 5, 10)) -> Dict[str, float]:
     """

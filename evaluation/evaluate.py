@@ -32,7 +32,7 @@ def load_yolo_label(label_path: str, W: int, H: int) -> List[Tuple[int, List[int
 
 
 def main(images_dir: str):
-    vlm = VLMClassifier()  # ViT-B/32, laion2b
+    vlm = VLMClassifier() 
     y_true, logits_all = [], []
 
     image_paths = sorted(
@@ -79,7 +79,6 @@ def main(images_dir: str):
     print(f"Samples: {report['support']}")
     print(f"Accuracy: {report['accuracy']:.4f} | Top1: {report['top1']:.4f} | Top3: {report['top3']:.4f} | Top5: {report['top5']:.4f}")
     print(f"Macro F1: {report['macro_f1']:.4f} | Micro F1: {report['micro_f1']:.4f} | Weighted F1: {report['weighted_f1']:.4f}")
-    # Nếu cần: print(report['per_class']) hoặc lưu confusion_matrix
 
 
 if __name__ == "__main__":

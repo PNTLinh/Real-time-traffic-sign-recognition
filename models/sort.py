@@ -1,6 +1,3 @@
-# sort.py
-# Simple Online Realtime Tracking (SORT)
-# Nguồn gốc từ https://github.com/abewley/sort (phiên bản Python)
 import numpy as np
 from filterpy.kalman import KalmanFilter
 

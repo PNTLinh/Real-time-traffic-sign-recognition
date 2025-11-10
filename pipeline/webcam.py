@@ -8,23 +8,16 @@ from ultralytics import YOLO
 import time
 
 # ==== CẤU HÌNH ====
-MODEL_PATH = r"C:\Users\Admin\OneDrive\Desktop\deeplearning_project\Real-time-traffic-sign-recognition\weights\yolo\best.onnx"
+MODEL_PATH = r"local_root\weights\yolo\best.onnx"
 IMG_SIZE = 1024
 CONF_THRESH = 0.2
 FRAME_SKIP = 3
 SAVE_OUTPUT = True
-OUTPUT_PATH = "webcam_output.mp4"
+OUTPUT_PATH = "local_root\outputs\yolo\webcam_output.mp4"
 OUTPUT_FPS = 25 # Target FPS for the output video
-# --- Thêm cấu hình độ phân giải webcam ---
-# Yêu cầu webcam mở ở 1280x720 (HD)
 WEBCAM_WIDTH = 1280
 WEBCAM_HEIGHT = 720
-# ------------------------------------------
-
-
-# ==== LOAD MODEL ====
-print("🔹 Đang tải model ONNX...")
-# Ensure you have the correct ONNX provider installed (e.g., onnxruntime or onnxruntime-gpu)
+print(" Đang tải model ONNX...")
 model = YOLO(MODEL_PATH, task="detect")
 tracker = sv.ByteTrack()
 box_annotator = sv.BoxAnnotator()

@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import os, json, argparse, yaml
-from typing import List, Sequence, Tuple
+from typing import List, Sequence, Tuple, Optional, Union
 
 import numpy as np
 import cv2
+import torch
 
 from utils.logger import setup_logger, draw_boxes, FPSMeter, overlay_fps
+from utils.paths import PATHS
 
 # ---- YOLO detector (bạn đã viết) ----
 # Yêu cầu: phải có lớp YoloDetector với:
@@ -25,19 +27,32 @@ except Exception as e:
 from models.vlm_classifier import VLMClassifier
 
 
+def _res(pathlike: Union[str, int, None]) -> Union[str, int, None]:
+    """Chuẩn hoá backslash và resolve alias local_root/... , local/..."""
+    if isinstance(pathlike, str):
+        pathlike = pathlike.replace("\\", "/")
+    return PATHS.resolve(pathlike)
+
+
 def load_vlm_from_config(cfg_vlm: dict) -> VLMClassifier:
-    with open(cfg_vlm["config_json"], "r", encoding="utf-8") as f:
+    """
+    Đọc JSON cấu hình VLM, hỗ trợ alias local_root/... và local/...
+    """
+    cfg_json_path = _res(cfg_vlm["config_json"])
+    with open(cfg_json_path, "r", encoding="utf-8") as f:
         vcfg = json.load(f)
 
-    # đọc prompts từ file
-    templates = []
+    # đọc prompts từ file (nếu có)
+    templates: List[str] = []
     prompt_file = vcfg.get("prompt_file")
-    if prompt_file and os.path.exists(prompt_file):
-        with open(prompt_file, "r", encoding="utf-8") as pf:
-            for line in pf:
-                line = line.strip()
-                if line:
-                    templates.append(line)
+    if prompt_file:
+        prompt_path = _res(prompt_file)
+        if prompt_path and os.path.exists(prompt_path):
+            with open(prompt_path, "r", encoding="utf-8") as pf:
+                for line in pf:
+                    line = line.strip()
+                    if line:
+                        templates.append(line)
 
     vlm = VLMClassifier(
         model_name=vcfg.get("model_name", "ViT-B-32"),
@@ -71,24 +86,39 @@ def fuse_label(
         return vlm_label
     if strategy == "and":
         return f"{yolo_label} | {vlm_label}({vlm_score:.2f})"
-
-    # consensus (default)
-    return vlm_label if vlm_score >= threshold else yolo_label
+    return vlm_label if vlm_score >= threshold else yolo_label  # consensus
 
 
 def main(cfg_path: str):
     logger = setup_logger()
 
+    # ---- đọc config, rồi khởi tạo PATHS theo local_root ----
+    cfg_path = _res(cfg_path)  # cho phép alias cả ở --config
     with open(cfg_path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
+    # Gốc cục bộ cho alias local_root/... và local/...
+    local_root = (cfg.get("paths") or {}).get("local_root", ".")
+    PATHS.init(local_root)
+
+    # Resolve các path quan trọng
+    vcfg = cfg["video"]
+    vcfg["source"]   = _res(vcfg.get("source", 0))
+    vcfg["out_path"] = _res(vcfg.get("out_path", "outputs/demo.mp4"))
+
+    yolo_cfg = cfg["yolo"]
+    yolo_cfg["weights"] = _res(yolo_cfg["weights"])
+
+    vlm_cfg = cfg["vlm"]
+    vlm_cfg["config_json"] = _res(vlm_cfg["config_json"])
+
+    # ---- device ----
     device = cfg.get("device", "auto")
     if device == "auto":
-        device = "cuda" if cv2.cuda.getCudaEnabledDeviceCount() > 0 else "cpu"
-    logger.info(f"Device: {device}")
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(f"Device: {device} | Torch {torch.__version__} | CUDA {torch.version.cuda}")
 
     # --- YOLO ---
-    yolo_cfg = cfg["yolo"]
     det = YoloDetector(
         weights=yolo_cfg["weights"],
         img_size=yolo_cfg.get("img_size", 640),
@@ -101,18 +131,20 @@ def main(cfg_path: str):
     logger.info("YOLO detector loaded.")
 
     # --- VLM ---
-    vlm_cfg = cfg["vlm"]
     vlm_enabled = bool(vlm_cfg.get("enabled", True))
-    vlm = None
+    vlm: Optional[VLMClassifier] = None
     if vlm_enabled:
         vlm = load_vlm_from_config(vlm_cfg)
         logger.info("VLM classifier loaded.")
+        # warm-up nhẹ để ổn định tốc độ
+        dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+        _ = vlm.classify_detections(dummy, [[0, 0, 64, 64]], topk=1)
+
     fuse_strategy = vlm_cfg.get("fuse_strategy", "consensus")
     fuse_threshold = float(vlm_cfg.get("consensus_threshold", 0.6))
     min_crop_edge = int(vlm_cfg.get("min_crop_edge", 12))
 
     # --- Video IO ---
-    vcfg = cfg["video"]
     cap = cv2.VideoCapture(vcfg.get("source", 0))
     if not cap.isOpened():
         logger.error("Không mở được nguồn video.")
@@ -122,17 +154,30 @@ def main(cfg_path: str):
     writer = None
     if save_out:
         out_path = vcfg.get("out_path", "outputs/demo.mp4")
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        PATHS.ensure_parent_dir(out_path)
         fps_w = vcfg.get("writer_fps", 25)
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        writer = cv2.VideoWriter(
-            out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps_w, (w, h)
-        )
-        logger.info(f"Ghi video ra: {out_path}")
+        # codec fallback
+        for cc in ("mp4v", "XVID", "avc1"):
+            writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*cc), fps_w, (w, h))
+            if writer.isOpened():
+                logger.info(f"Ghi video ra: {out_path} (codec {cc})")
+                break
+        if writer is None or not writer.isOpened():
+            logger.warning("Không mở được VideoWriter; tắt save_out.")
+            writer = None
 
     show = bool(vcfg.get("display", True))
     fps_meter = FPSMeter(avg_over=30)
+
+    # Cảnh báo nếu danh sách lớp YOLO ≠ VLM (tránh fuse sai)
+    try:
+        if hasattr(det, "class_names") and det.class_names and vlm and vlm.labels:
+            if set(det.class_names) != set(vlm.labels):
+                logger.warning("Danh sách lớp YOLO khác VLM; hãy đồng bộ label để fuse chính xác.")
+    except Exception:
+        pass
 
     logger.info("Bắt đầu realtime… Nhấn 'q' để thoát.")
     while True:
@@ -191,10 +236,13 @@ def main(cfg_path: str):
         writer.release()
     cv2.destroyAllWindows()
     logger.info("Kết thúc.")
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    # dùng forward slash; có thể truyền alias: --config local_root/configs/config.yaml
     parser.add_argument("--config", default="configs/config.yaml", help="Đường dẫn file config.yaml")
     args = parser.parse_args()
-    main(args.config)
+
+    cfg_path = args.config
+    main(cfg_path)

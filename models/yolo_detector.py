@@ -17,9 +17,8 @@ augmentation = {
     "mixup": 0.1               # bật mixup nhẹ (tùy chọn)
 }
 
-# Bắt đầu huấn luyện
 model.train(
-    data=r"C:\Users\Admin\OneDrive\Desktop\deeplearning_project\Real-time-traffic-sign-recognition\datasets\data.yaml",   
+    data=r"local_root\datasets\data.yaml",   
     epochs=100,
     imgsz=320,                  # kích thước ảnh đầu vào
     batch=16,
