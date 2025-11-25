@@ -50,23 +50,38 @@ def main(
     cap = cv2.VideoCapture(source)
     assert cap.isOpened(), f"Không mở được nguồn video: {source}"
 
+    total_frames = 0
+    total_yolo_time = 0.0
+    total_vlm_time = 0.0
+
     t0 = time.time()
     while True:
         ok, frame = cap.read()
         if not ok:
             break
 
+        total_frames += 1
+
+        # YOLO detection with timing
+        start_yolo = time.time()
         results = det.predict(source=frame, imgsz=640, conf=0.25, verbose=False)[0]
+        yolo_duration = time.time() - start_yolo
+        total_yolo_time += yolo_duration
+
         boxes = results.boxes
         if boxes is not None and len(boxes) > 0:
             xyxy = boxes.xyxy.cpu().numpy()
             conf = boxes.conf.cpu().numpy()
 
+            # VLM classification with timing
+            start_vlm = time.time()
             pred_vlm = vlm.classify_detections(
                 image_bgr=frame,
                 bboxes_xyxy=xyxy.tolist(),
                 topk=1
             )
+            vlm_duration = time.time() - start_vlm
+            total_vlm_time += vlm_duration
 
             for i, p in enumerate(pred_vlm):
                 label = f"{p['pred_label']} {p['pred_score']:.2f}"
@@ -78,7 +93,10 @@ def main(
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"Done. Runtime: {time.time() - t0:.1f}s")
+    total_duration = time.time() - t0
+    print(f"Processed {total_frames} frames in {total_duration:.2f} seconds.")
+    print(f"Average YOLO detection time per frame: {total_yolo_time / max(1, total_frames):.4f} sec")
+    print(f"Average VLM classification time per frame: {total_vlm_time / max(1, total_frames):.4f} sec")
 
 
 if __name__ == "__main__":
