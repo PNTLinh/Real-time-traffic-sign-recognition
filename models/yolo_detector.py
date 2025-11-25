@@ -1,31 +1,53 @@
 from ultralytics import YOLO
-import os
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-# Nạp model YOLO
-model = YOLO("yolo12n.pt")  
+import numpy as np
 
-# Cấu hình augmentation 
-augmentation = {
-    "degrees": 10,             # Xoay ±10°
-    "scale": 0.1,              # Zoom (90%-110%)
-    "hsv_h": 0.015,            # Hue ±15°
-    "hsv_s": 0.15,             # Saturation ±15%
-    "hsv_v": 0.15,             # Brightness ±15%
-    "flipud": 0.0,             # Không lật dọc
-    "fliplr": 0.5,             # 50% lật ngang
-    "mosaic": 1.0,             # bật mosaic
-    "mixup": 0.1               # bật mixup nhẹ (tùy chọn)
-}
+class YoloDetector:
+    def __init__(
+        self,
+        weights: str,
+        img_size: int = 640,
+        conf_thres: float = 0.25,
+        iou_thres: float = 0.45,
+        max_det: int = 50,
+        classes=None,
+        device: str = "cpu",
+    ):
+        self.model = YOLO(weights)
+        self.img_size = img_size
+        self.conf_thres = conf_thres
+        self.iou_thres = iou_thres
+        self.max_det = max_det
+        self.classes = classes
+        self.device = device
 
-model.train(
-    data=r"local_root\datasets\data.yaml",   
-    epochs=100,
-    imgsz=320,                  # kích thước ảnh đầu vào
-    batch=16,
-    name="traffic_sign_v3_aug",
-    workers=4,
-    project="runs/train",
-    exist_ok=True,
-    device="0",                # sử dụng GPU đầu tiên
-    **augmentation               # truyền cấu hình augmentation vào
-)
+        # Load class names from the model's YOLO data
+        data = self.model.model.yaml.get('names', None) if hasattr(self.model, 'model') else None
+        if data is None:
+            self.class_names = []
+        elif isinstance(data, dict):
+            self.class_names = [data[k] for k in sorted(data.keys(), key=lambda x: int(x))]
+        else:
+            self.class_names = list(data)
+
+    def predict(self, frame_bgr):
+        # Run prediction on BGR frame
+        results = self.model.predict(
+            source=frame_bgr,
+            imgsz=self.img_size,
+            conf=self.conf_thres,
+            iou=self.iou_thres,
+            max_det=self.max_det,
+            classes=self.classes,
+            verbose=False,
+            device=self.device,
+        )
+        res = results[0]
+        boxes = res.boxes
+        if boxes is None or len(boxes) == 0:
+            return [], [], []
+
+        xyxy = boxes.xyxy.cpu().numpy().tolist()
+        scores = boxes.conf.cpu().numpy().tolist()
+        cls_ids = boxes.cls.cpu().numpy().astype(int).tolist()
+
+        return xyxy, scores, cls_ids
