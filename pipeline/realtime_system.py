@@ -1,107 +1,156 @@
-from ultralytics import YOLO
-import torch
+"""
+realtime_system.py
+Hệ thống real-time nhận diện biển báo giao thông:
+- Camera Thread (non-blocking)
+- YOLO detection (CUDA)
+- VLM batch classification (async)
+- Fusion YOLO + VLM (Bayesian fusion)
+- Rendering real-time
+"""
+
+from __future__ import annotations
 import cv2
-from PIL import Image
-import yaml
 import time
-import os
+import threading
+from queue import Queue
 
+import numpy as np
+from models.yolo_detector import YOLODetector
 from models.vlm_classifier import VLMClassifier
+from pipeline.optimizer import ModelOptimizer
 
 
-def load_yolo_names(yaml_path: str):
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        y = yaml.safe_load(f)
-    names = y.get("names")
-    if isinstance(names, dict):
-        names = [names[k] for k in sorted(names.keys(), key=lambda x: int(x))]
-    return [str(n) for n in names]
+# --------------------------------------------------------------
+# FUSION (YOLO + VLM)
+# --------------------------------------------------------------
+
+def fusion_bayesian(p_yolo: float, p_vlm: float):
+    """
+    Công thức chuẩn xác hơn cộng weighted:
+    p = (py * pv) / ((py*pv) + ((1-py)*(1-pv)))
+    """
+    return (p_yolo * p_vlm) / ((p_yolo * p_vlm) + (1 - p_yolo) * (1 - p_vlm) + 1e-8)
 
 
-def draw_box(img, xyxy, color=(0, 255, 0), text: str = None):
-    x1, y1, x2, y2 = map(int, xyxy)
-    cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-    if text:
-        cv2.rectangle(img, (x1, y1 - 22), (x1 + max(120, 8 * len(text)), y1), color, -1)
-        cv2.putText(
-            img, text, (x1 + 4, y1 - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 1, cv2.LINE_AA
-        )
+# --------------------------------------------------------------
+# REAL-TIME SYSTEM
+# --------------------------------------------------------------
 
+class RealTimeSystem:
+    def __init__(
+        self,
+        camera_id=0,
+        img_size=320,
+        show_vlm=True,
+        batch_vlm=True,
+    ):
+        self.img_size = img_size
+        self.show_vlm = show_vlm
+        self.batch_vlm = batch_vlm
 
-def main(
-    weights_yolo: str,
-    data_yaml: str,
-    source: int | str = 0,  # webcam id hoặc đường dẫn video
-    vlm_model_name: str = "ViT-B-32",
-    vlm_pretrained: str = "laion2b_s34b_b79k",
-):
-    det = YOLO(weights_yolo)
-    class_names_yolo = load_yolo_names(data_yaml)
+        # Queue for camera frames
+        self.frame_queue = Queue(maxsize=3)
 
-    class_names_vlm = class_names_yolo
+        # Load models
+        print("🚀 Initializing models...")
+        self.detector = YOLODetector("weights/yolo/best.pt")
+        self.vlm = VLMClassifier(cache_path="weights/vlm/text_features.pt")
 
-    vlm = VLMClassifier(
-        labels=class_names_vlm,
-        model_name=vlm_model_name,
-        pretrained=vlm_pretrained,
-        # cache_path="outputs/text_embeds.pt" # Uncomment if applicable
-    )
+        # Optimizer
+        self.opt = ModelOptimizer()
+        self.opt.warmup_yolo(self.detector.model, img_size=img_size)
 
-    cap = cv2.VideoCapture(source)
-    assert cap.isOpened(), f"Không mở được nguồn video: {source}"
+        self.cap = cv2.VideoCapture(camera_id)
+        self.running = True
 
-    total_frames = 0
-    total_yolo_time = 0.0
-    total_vlm_time = 0.0
+    # --------------------------------------------------------------
+    # CAMERA THREAD
+    # --------------------------------------------------------------
 
-    t0 = time.time()
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
+    def camera_thread(self):
+        print("🎥 Camera thread started")
+        while self.running:
+            ret, frame = self.cap.read()
+            if not ret:
+                continue
 
-        total_frames += 1
+            if not self.frame_queue.full():
+                self.frame_queue.put(frame)
 
-        # YOLO detection with timing
-        start_yolo = time.time()
-        results = det.predict(source=frame, imgsz=640, conf=0.25, verbose=False)[0]
-        yolo_duration = time.time() - start_yolo
-        total_yolo_time += yolo_duration
+    # --------------------------------------------------------------
+    # MAIN LOOP
+    # --------------------------------------------------------------
 
-        boxes = results.boxes
-        if boxes is not None and len(boxes) > 0:
-            xyxy = boxes.xyxy.cpu().numpy()
-            conf = boxes.conf.cpu().numpy()
+    def run(self):
+        # Start camera thread
+        cam_thread = threading.Thread(target=self.camera_thread, daemon=True)
+        cam_thread.start()
 
-            # VLM classification with timing
-            start_vlm = time.time()
-            pred_vlm = vlm.classify_detections(
-                image_bgr=frame,
-                bboxes_xyxy=xyxy.tolist(),
-                topk=1
-            )
-            vlm_duration = time.time() - start_vlm
-            total_vlm_time += vlm_duration
+        print("🔥 Real-time system started")
 
-            for i, p in enumerate(pred_vlm):
-                label = f"{p['pred_label']} {p['pred_score']:.2f}"
-                draw_box(frame, xyxy[i], color=(0, 255, 0), text=label)
+        pending_vlm = []
 
-        cv2.imshow("YOLO + VLM", frame)
-        if (cv2.waitKey(1) & 0xFF) in (27, ord("q")):
-            break
+        while True:
+            if self.frame_queue.empty():
+                time.sleep(0.001)
+                continue
 
-    cap.release()
-    cv2.destroyAllWindows()
-    total_duration = time.time() - t0
-    print(f"Processed {total_frames} frames in {total_duration:.2f} seconds.")
-    print(f"Average YOLO detection time per frame: {total_yolo_time / max(1, total_frames):.4f} sec")
-    print(f"Average VLM classification time per frame: {total_vlm_time / max(1, total_frames):.4f} sec")
+            frame = self.frame_queue.get()
 
+            # YOLO detect
+            dets = self.detector.detect(frame)
 
-if __name__ == "__main__":
-    WEIGHTS = "local_root/weights/yolo/best.pt"
-    DATA_YAML = "local_root/datasets/data.yaml"
-    SOURCE = 0
+            # Collect crops for VLM
+            crops_boxes = [d["bbox"] for d in dets]
 
-    main(WEIGHTS, DATA_YAML, SOURCE)
+            # Run VLM batch
+            if self.show_vlm:
+                vlm_results = self.vlm.classify_crops(frame, crops_boxes)
+            else:
+                vlm_results = []
+
+            # Fusion + Drawing
+            out_frame = self.render(frame, dets, vlm_results)
+
+            cv2.imshow("Traffic Sign System", out_frame)
+            if cv2.waitKey(1) & 0xFF == 27:
+                break
+
+        self.running = False
+        self.cap.release()
+        cv2.destroyAllWindows()
+
+    # --------------------------------------------------------------
+    # RENDER
+    # --------------------------------------------------------------
+
+    def render(self, frame, dets, vlm_results):
+        img = frame.copy()
+
+        for i, det in enumerate(dets):
+            x1, y1, x2, y2 = det["bbox"]
+            cls = det["class_name"]
+            yolo_conf = det["confidence"]
+
+            color = (0, 255, 0)
+
+            cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+
+            label = f"{cls} {yolo_conf:.2f}"
+
+            # VLM overlay
+            if i < len(vlm_results):
+                vlm = vlm_results[i]
+                vlm_label = vlm["pred_label"]
+                vlm_conf = vlm["pred_score"]
+
+                combined = fusion_bayesian(yolo_conf, vlm_conf)
+                label += f" | {vlm_label} {vlm_conf:.2f} | Fused {combined:.2f}"
+
+            # draw label
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+            cv2.rectangle(img, (x1, y1 - th - 6), (x1 + tw, y1), color, -1)
+            cv2.putText(img, label, (x1, y1 - 3),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+
+        return img

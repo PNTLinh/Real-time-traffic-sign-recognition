@@ -18,13 +18,10 @@ traffic-sign-system/
 ├── models/                      # Định nghĩa và quản lý Models
 │   ├── yolo_detector.py         # Module YOLO detection
 │   ├── vlm_classifier.py        # Module VLM classification
-│   ├── run_demo.py              # Script chạy demo đơn giản
-│   └── sort.py                  # Thuật toán tracking (nếu có)
 │
 ├── pipeline/                    # Luồng xử lý chính
 │   ├── realtime_system.py       # Tích hợp toàn bộ hệ thống real-time
 │   ├── optimizer.py             # Các kỹ thuật tối ưu tốc độ (TensorRT, quantization)
-│   └── webcam.py                # Script chạy inference trên webcam
 │
 ├── evaluation/                  # Đánh giá hiệu năng
 │   ├── metrics.py               # Tính toán mAP, Precision, Recall
@@ -74,31 +71,72 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
    - <height>: Chiều cao của bounding box.
 
 ### Cách thực hiện 
-1. Clone repository
+1. Cài đặt môi trường
+
+1.1 Clone project
 ```text
 git clone https://github.com/PNTLinh/Real-time-traffic-sign-recognition.git
 cd Real-time-traffic-sign-recognition
 ```
-2. Cài đặt các thư viện cần thiết
-```text
+1.2 Tạo môi trường Python
+
+py -3.10 -m venv prodl
+
+prodl\Scripts\activate   # Windows
+
+1.3 Cài dependencies
 pip install -r requirements.txt
-```
-3. Cấu hình
 
-Kiểm tra và chỉnh sửa các tham số đường dẫn hoặc hyper-parameters trong file config.yaml.
+📦 2. Chuẩn bị config.yaml
 
-4. Huấn luyện 
-```text
-python models/yolo_detector.py
-```
-5. Inference (Kiểm thử)
-```text
-python pipeline/webcam.py
-```
-6. Chạy hệ thống tích hợp đầy đủ (YOLO + VLM):
-```text
-python main.py
-```
+
+🏋️‍♂️ 3. Huấn luyện YOLO
+python main.py --mode train \
+    --data datasets/processed/data.yaml \
+    --epochs 100 \
+    --batch 16 \
+    --imgsz 320 \
+    --model-size n
+
+
+Model tốt nhất sẽ được lưu tại:
+
+outputs/yolo/train/weights/best.pt
+
+🎥 4. Chạy realtime (webcam / video / image)
+4.1 Webcam (mặc định camera 0)
+python main.py --mode inference --source webcam
+
+4.2 Chạy video input
+python main.py --mode inference --source video \
+    --input data/test/traffic.mp4
+
+4.3 Chạy 1 ảnh
+python main.py --mode inference --source image \
+    --input data/test/sign.jpg
+
+🧠 5. Tắt VLM (YOLO only)
+python main.py --mode inference --source webcam --no-vlm
+
+⚡ 6. Tối ưu hóa YOLO (ONNX / TensorRT / Benchmark)
+6.1 Xuất ONNX
+python main.py --mode optimize --optimize-action onnx --model weights/yolo/best.pt
+
+6.2 Xuất TensorRT
+python main.py --mode optimize --optimize-action tensorrt --model weights/yolo/best.onnx
+
+6.3 Benchmark tốc độ model
+python main.py --mode optimize --optimize-action benchmark \
+    --model weights/yolo/best.pt \
+    --iterations 200
+
+🧪 7. Test nhanh YOLO
+python main.py --mode test --input data/test/sample.jpg
+
+
+Output sẽ được lưu tại:
+
+outputs/test_result.jpg
 
 
 

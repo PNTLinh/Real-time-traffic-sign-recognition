@@ -1,18 +1,18 @@
-# configs/config.yaml
-device: auto   # auto|cuda|cpu
+device: auto    # auto|cuda|cpu
 
 paths:
-  local_root: "C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition"   
+  local_root: "C:/Users/ntlinh/Documents/20251/DL/Real-time-traffic-sign-recognition"
 
 video:
-  source: "C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\data\test\14443854_1920_1080_60fps.mp4" # 0 = webcam; 
+  # 0 = webcam; hoặc file video
+  source: "C:/Users/ntlinh/Documents/20251/DL/Real-time-traffic-sign-recognition/data/test/14443854_1920_1080_60fps.mp4"
   display: true
   save_out: false
-  out_path: local/outputs/traffic_demo.mp4
+  out_path: "local/outputs/traffic_demo.mp4"
   writer_fps: 25
 
 yolo:
-  weights: C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\weights\yolo\best.pt
+  weights: "C:/Users/ntlinh/Documents/20251/DL/Real-time-traffic-sign-recognition/weights/yolo/best.pt"
   img_size: 640
   conf_thres: 0.25
   iou_thres: 0.45
@@ -21,9 +21,9 @@ yolo:
 
 vlm:
   enabled: true
-  config_json: C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\weights\vlm\config.json
+  config_json: "C:/Users/ntlinh/Documents/20251/DL/Real-time-traffic-sign-recognition/weights/vlm/config.json"
   min_crop_edge: 12
-  fuse_strategy: consensus   # yolo_only|vlm_only|and|consensus
+  fuse_strategy: consensus     # yolo_only | vlm_only | and | consensus
   consensus_threshold: 0.60
 
 draw:

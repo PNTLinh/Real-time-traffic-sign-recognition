@@ -1,243 +1,239 @@
-# main.py
-# -*- coding: utf-8 -*-
-from __future__ import annotations
-import os, json, argparse, yaml
-from typing import List, Sequence, Tuple, Optional, Union
+"""
+Main Entry Point
+Hệ thống nhận diện biển báo giao thông thời gian thực
+Tích hợp YOLO + VLM + Optimizer
+"""
 
-import numpy as np
-import cv2
-import torch
+import argparse
+import sys
+from pathlib import Path
+import yaml
 
-from utils.logger import setup_logger, draw_boxes, FPSMeter, overlay_fps
-from utils.paths import PATHS
+# Thêm project root vào sys.path
+ROOT = Path(__file__).resolve().parent
+sys.path.append(str(ROOT))
 
-try:
-    from models.yolo_detector import YoloDetector  # type: ignore
-except Exception as e:
-    raise ImportError(
-        "Không tìm thấy models/yolo_detector.py với lớp YoloDetector. "
-    ) from e
-
-# ---- VLM ----
-from models.vlm_classifier import VLMClassifier
-
-
-def _res(pathlike: Union[str, int, None]) -> Union[str, int, None]:
-    """Chuẩn hoá backslash và resolve alias local_root/... , local/..."""
-    if isinstance(pathlike, str):
-        pathlike = pathlike.replace("\\", "/")
-    return PATHS.resolve(pathlike)
+# Import modules (đã refactor)
+from pipeline.realtime_system import RealTimeSystem
+from models.yolo_detector import YOLODetector
+from models.yolo_detector import train_yolo
+from pipeline.optimizer import ModelOptimizer
+from utils.logger import setup_logging
 
 
-def load_vlm_from_config(cfg_vlm: dict) -> VLMClassifier:
-    """
-    Đọc JSON cấu hình VLM, hỗ trợ alias local_root/... và local/...
-    """
-    cfg_json_path = _res(cfg_vlm["config_json"])
-    with open(cfg_json_path, "r", encoding="utf-8") as f:
-        vcfg = json.load(f)
+# ----------------------------------------------------------------------
+# CONFIG
+# ----------------------------------------------------------------------
 
-    # đọc prompts từ file (nếu có)
-    templates: List[str] = []
-    prompt_file = vcfg.get("prompt_file")
-    if prompt_file:
-        prompt_path = _res(prompt_file)
-        if prompt_path and os.path.exists(prompt_path):
-            with open(prompt_path, "r", encoding="utf-8") as pf:
-                for line in pf:
-                    line = line.strip()
-                    if line:
-                        templates.append(line)
-
-    vlm = VLMClassifier(
-        model_name=vcfg.get("model_name", "ViT-B-32"),
-        pretrained=vcfg.get("pretrained", "laion2b_s34b_b79k"),
-        use_half=bool(vcfg.get("use_half", True)),
-        labels=vcfg.get("labels"),
-        templates_vi=templates if templates else None,
-        templates_en=[],
-    )
-    return vlm
-
-
-def fuse_label(
-    yolo_label: str,
-    vlm_label: str,
-    vlm_score: float,
-    strategy: str = "consensus",
-    threshold: float = 0.6,
-) -> str:
-    """
-    Chiến lược ghép nhãn:
-      - 'yolo_only'   : dùng YOLO
-      - 'vlm_only'    : dùng VLM
-      - 'and'         : "YOLO: X | VLM: Y(0.92)"
-      - 'consensus'   : nếu score >= threshold -> dùng VLM; ngược lại dùng YOLO
-    """
-    strategy = (strategy or "consensus").lower()
-    if strategy == "yolo_only":
-        return yolo_label
-    if strategy == "vlm_only":
-        return vlm_label
-    if strategy == "and":
-        return f"{yolo_label} | {vlm_label}({vlm_score:.2f})"
-    return vlm_label if vlm_score >= threshold else yolo_label  # consensus
-
-
-def main(cfg_path: str):
-    logger = setup_logger()
-
-    # ---- đọc config, rồi khởi tạo PATHS theo local_root ----
-    cfg_path = _res(cfg_path)  # cho phép alias cả ở --config
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-
-    # Gốc cục bộ cho alias local_root/... và local/...
-    local_root = (cfg.get("paths") or {}).get("local_root", ".")
-    PATHS.init(local_root)
-
-    # Resolve các path quan trọng
-    vcfg = cfg["video"]
-    vcfg["source"]   = _res(vcfg.get("source", 0))
-    vcfg["out_path"] = _res(vcfg.get("out_path", "outputs/demo.mp4"))
-
-    yolo_cfg = cfg["yolo"]
-    yolo_cfg["weights"] = _res(yolo_cfg["weights"])
-
-    vlm_cfg = cfg["vlm"]
-    vlm_cfg["config_json"] = _res(vlm_cfg["config_json"])
-
-    # ---- device ----
-    device = cfg.get("device", "auto")
-    if device == "auto":
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    logger.info(f"Device: {device} | Torch {torch.__version__} | CUDA {torch.version.cuda}")
-
-    # --- YOLO ---
-    det = YoloDetector(
-        weights=yolo_cfg["weights"],
-        img_size=yolo_cfg.get("img_size", 640),
-        conf_thres=yolo_cfg.get("conf_thres", 0.25),
-        iou_thres=yolo_cfg.get("iou_thres", 0.45),
-        max_det=yolo_cfg.get("max_det", 50),
-        classes=yolo_cfg.get("classes", None),
-        device=device,
-    )
-    logger.info("YOLO detector loaded.")
-
-    # --- VLM ---
-    vlm_enabled = bool(vlm_cfg.get("enabled", True))
-    vlm: Optional[VLMClassifier] = None
-    if vlm_enabled:
-        vlm = load_vlm_from_config(vlm_cfg)
-        logger.info("VLM classifier loaded.")
-        # warm-up nhẹ để ổn định tốc độ
-        dummy = np.zeros((64, 64, 3), dtype=np.uint8)
-        _ = vlm.classify_detections(dummy, [[0, 0, 64, 64]], topk=1)
-
-    fuse_strategy = vlm_cfg.get("fuse_strategy", "consensus")
-    fuse_threshold = float(vlm_cfg.get("consensus_threshold", 0.6))
-    min_crop_edge = int(vlm_cfg.get("min_crop_edge", 12))
-
-    # --- Video IO ---
-    cap = cv2.VideoCapture(vcfg.get("source", 0))
-    if not cap.isOpened():
-        logger.error("Không mở được nguồn video.")
-        return
-
-    save_out = bool(vcfg.get("save_out", False))
-    writer = None
-    if save_out:
-        out_path = vcfg.get("out_path", "outputs/demo.mp4")
-        PATHS.ensure_parent_dir(out_path)
-        fps_w = vcfg.get("writer_fps", 25)
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        # codec fallback
-        for cc in ("mp4v", "XVID", "avc1"):
-            writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*cc), fps_w, (w, h))
-            if writer.isOpened():
-                logger.info(f"Ghi video ra: {out_path} (codec {cc})")
-                break
-        if writer is None or not writer.isOpened():
-            logger.warning("Không mở được VideoWriter; tắt save_out.")
-            writer = None
-
-    show = bool(vcfg.get("display", True))
-    fps_meter = FPSMeter(avg_over=30)
-
-    # Cảnh báo nếu danh sách lớp YOLO ≠ VLM (tránh fuse sai)
+def load_config(path="config.yaml"):
     try:
-        if hasattr(det, "class_names") and det.class_names and vlm and vlm.labels:
-            if set(det.class_names) != set(vlm.labels):
-                logger.warning("Danh sách lớp YOLO khác VLM; hãy đồng bộ label để fuse chính xác.")
-    except Exception:
-        pass
+        with open(path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print(f"❌ Cannot load config {path}: {e}")
+        sys.exit(1)
 
-    logger.info("Bắt đầu realtime… Nhấn 'q' để thoát.")
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
 
-        # --- YOLO predict ---
-        boxes, scores, cls_ids = det.predict(frame)  # bạn đã implement
-        # lọc bbox quá nhỏ
-        keep = []
-        for i, (x1, y1, x2, y2) in enumerate(boxes):
-            if min(x2 - x1, y2 - y1) >= min_crop_edge:
-                keep.append(i)
-        boxes = [boxes[i] for i in keep]
-        scores = [scores[i] for i in keep]
-        cls_ids = [cls_ids[i] for i in keep]
+# ----------------------------------------------------------------------
+# TRAIN MODE
+# ----------------------------------------------------------------------
 
-        # --- Tên lớp từ YOLO ---
-        yolo_names = getattr(det, "class_names", None)
-        yolo_labels = [yolo_names[c] if (yolo_names and c < len(yolo_names)) else str(c) for c in cls_ids]
+def train_mode(args):
+    print("\n🎓 TRAINING MODE\n" + "=" * 60)
 
-        # --- VLM classify các crop ---
-        fused_labels = yolo_labels
-        if vlm_enabled and vlm and len(boxes) > 0:
-            outs = vlm.classify_detections(frame, boxes, topk=3)
-            fused_labels = []
-            for yl, out in zip(yolo_labels, outs):
-                vl, vs = out["pred_label"], float(out["pred_score"])
-                fused_labels.append(fuse_label(yl, vl, vs, fuse_strategy, fuse_threshold))
+    model, results = train_yolo(
+        data_yaml=args.data,
+        epochs=args.epochs,
+        imgsz=args.imgsz,
+        batch=args.batch,
+        model_size=args.model_size,
+    )
 
-        # --- Vẽ ---
-        draw_boxes(
-            frame,
-            boxes_xyxy=boxes,
-            labels=fused_labels if cfg["draw"].get("show_vlm", True) else yolo_labels,
-            scores=scores if cfg["draw"].get("show_yolo", True) else None,
-            class_ids=cls_ids,
+    print("\n✅ Training completed!")
+    print("📁 Best model saved at: outputs/yolo/train/weights/best.pt")
+
+
+# ----------------------------------------------------------------------
+# INFERENCE MODE
+# ----------------------------------------------------------------------
+
+def inference_mode(args, config):
+    print("\n🎬 INFERENCE MODE\n" + "=" * 60)
+
+    enable_vlm = not args.no_vlm
+
+    # Khởi tạo hệ thống real-time
+    system = RealTimeSystem(
+        camera_id=0,
+        img_size=config.get("img_size", 320),
+        show_vlm=enable_vlm,
+        batch_vlm=True,
+    )
+
+    if args.source == "webcam":
+        print("📹 Running on Webcam ...")
+        system.run()
+
+    elif args.source == "video":
+        if args.input is None:
+            print("❌ You must specify --input for video mode")
+            sys.exit(1)
+        print(f"📹 Running on Video File: {args.input}")
+        system.run_video(args.input)
+
+    elif args.source == "image":
+        if args.input is None:
+            print("❌ You must specify --input for image mode")
+            sys.exit(1)
+        print(f"🖼 Processing Image: {args.input}")
+        system.run_image(args.input)
+
+    else:
+        print(f"❌ Unknown source: {args.source}")
+        sys.exit(1)
+
+
+# ----------------------------------------------------------------------
+# OPTIMIZE MODE
+# ----------------------------------------------------------------------
+
+def optimize_mode(args):
+    print("\n⚡ OPTIMIZATION MODE\n" + "=" * 60)
+
+    opt = ModelOptimizer()
+
+    if args.optimize_action == "onnx":
+        print("🔄 Exporting to ONNX...")
+        YOLO(model=args.model).export(format="onnx")
+
+    elif args.optimize_action == "tensorrt":
+        print("🔄 Exporting to TensorRT...")
+        opt.export_to_trt(
+            model_path=args.model,
+            output=args.output or "weights/yolo/best.engine",
         )
 
-        # --- FPS ---
-        fps_meter.update()
-        if cfg["draw"].get("show_fps", True):
-            overlay_fps(frame, fps_meter.fps)
+    elif args.optimize_action == "quantize":
+        print("🔄 Quantizing INT8 not implemented in refactor")
+        print("⚠️ Use PyTorch FX or TensorRT INT8 calibration instead.")
 
-        if show:
-            cv2.imshow("Traffic-Sign (YOLO + VLM)", frame)
-            if (cv2.waitKey(1) & 0xFF) == ord("q"):
-                break
+    elif args.optimize_action == "benchmark":
+        print("📊 Benchmarking ...")
+        opt.benchmark(
+            model_path=args.model,
+            imgsz=args.imgsz,
+            num_iterations=args.iterations,
+        )
 
-        if writer is not None:
-            writer.write(frame)
-
-    cap.release()
-    if writer is not None:
-        writer.release()
-    cv2.destroyAllWindows()
-    logger.info("Kết thúc.")
+    print("\n✅ Optimization completed!")
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    # dùng forward slash; có thể truyền alias: --config local_root/configs/config.yaml
-    parser.add_argument("--config", default="configs/config.yaml", help="Đường dẫn file config.yaml")
+# ----------------------------------------------------------------------
+# TEST MODE
+# ----------------------------------------------------------------------
+
+def test_mode(args):
+    print("\n🧪 TEST MODE\n" + "=" * 60)
+
+    detector = YOLODetector(args.model, conf=0.5)
+
+    import cv2
+    if args.input is None:
+        print("❌ You must specify --input for test mode")
+        return
+
+    image = cv2.imread(args.input)
+    if image is None:
+        print(f"❌ Cannot load image: {args.input}")
+        return
+
+    dets = detector.detect(image)
+
+    print(f"Found {len(dets)} detections:")
+    for d in dets:
+        print(f" - {d['class_name']} ({d['confidence']:.2f})")
+
+    vis = detector.visualize(image, dets)
+    out = "outputs/test_result.jpg"
+    cv2.imwrite(out, vis)
+    print(f"💾 Saved: {out}")
+
+    print("\n✅ Test completed!")
+
+
+# ----------------------------------------------------------------------
+# MAIN
+# ----------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Real-time Traffic Sign Recognition System",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    # Common args
+    parser.add_argument("--mode", required=True,
+                        choices=["train", "inference", "optimize", "test"])
+    parser.add_argument("--config", default="config.yaml")
+    parser.add_argument("--model", default="weights/yolo/best.pt")
+    parser.add_argument("--input", default=None)
+    parser.add_argument("--output", default=None)
+
+    # Training
+    parser.add_argument("--data", default="datasets/processed/data.yaml")
+    parser.add_argument("--epochs", default=100, type=int)
+    parser.add_argument("--batch", default=16, type=int)
+    parser.add_argument("--imgsz", default=320, type=int)
+    parser.add_argument("--model-size", default="n",
+                        choices=["n", "s", "m", "l", "x"])
+
+    # Inference
+    parser.add_argument("--source", default="webcam",
+                        choices=["webcam", "video", "image"])
+    parser.add_argument("--no-vlm", action="store_true")
+
+    # Optimization
+    parser.add_argument("--optimize-action",
+                        choices=["onnx", "tensorrt", "quantize", "benchmark"])
+    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--iterations", type=int, default=100)
+
     args = parser.parse_args()
 
-    cfg_path = args.config
-    main(cfg_path)
+    # Logging
+    setup_logging()
+
+    # Load config
+    config = load_config(args.config)
+
+    print("\n" + "=" * 60)
+    print("🚦 TRAFFIC SIGN RECOGNITION SYSTEM")
+    print("=" * 60)
+    print(f"Mode: {args.mode}")
+    print("=" * 60 + "\n")
+
+    # Mode routing
+    if args.mode == "train":
+        train_mode(args)
+
+    elif args.mode == "inference":
+        inference_mode(args, config)
+
+    elif args.mode == "optimize":
+        if args.optimize_action is None:
+            print("❌ Please provide --optimize-action")
+            sys.exit(1)
+        optimize_mode(args)
+
+    elif args.mode == "test":
+        test_mode(args)
+
+    print("\n" + "=" * 60)
+    print("✅ COMPLETED SUCCESSFULLY")
+    print("=" * 60 + "\n")
+
+
+# ----------------------------------------------------------------------
+
+if __name__ == "__main__":
+    main()
