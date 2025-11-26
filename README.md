@@ -44,7 +44,8 @@ traffic-sign-system/
 │       └── prompt.txt
 │
 ├── datasets/                    # Dữ liệu (Chia tỉ lệ 7/2/1)
-│   ├── raw/                     # Dữ liệu thô
+│   ├── raw/                       # Dữ liệu thô
+    ├── data.yaml                 
 │   └── processed/               # Dữ liệu đã qua xử lý & augmentation
 │
 ├── outputs/                     # Nơi lưu kết quả đầu ra

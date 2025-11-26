@@ -2,7 +2,7 @@ import cv2
 import torch
 from ultralytics import YOLO
 from typing import List, Dict, Optional
-
+import ultralytics.nn.tasks
 class YOLODetector:
     """
     Clean-refactor YOLO detector:
@@ -21,7 +21,7 @@ class YOLODetector:
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         print(f"🔄 Loading YOLO model on {self.device} ...")
-
+        torch.serialization.add_safe_globals([ultralytics.nn.tasks.DetectionModel])
         self.model = YOLO(model_path)
         self.model.to(self.device)
 
@@ -106,3 +106,5 @@ class YOLODetector:
             cv2.putText(img, label, (x1, y1 - 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         return img
+    
+    

@@ -16,9 +16,9 @@ sys.path.append(str(ROOT))
 # Import modules (đã refactor)
 from pipeline.realtime_system import RealTimeSystem
 from models.yolo_detector import YOLODetector
-from models.yolo_detector import train_yolo
+from models.yolo_trainer import train_yolo
 from pipeline.optimizer import ModelOptimizer
-from utils.logger import setup_logging
+from utils.logger import setup_logger
 
 
 # ----------------------------------------------------------------------
@@ -70,11 +70,7 @@ def inference_mode(args, config):
         batch_vlm=True,
     )
 
-    if args.source == "webcam":
-        print("📹 Running on Webcam ...")
-        system.run()
-
-    elif args.source == "video":
+    if args.source == "video":
         if args.input is None:
             print("❌ You must specify --input for video mode")
             sys.exit(1)
@@ -201,7 +197,7 @@ def main():
     args = parser.parse_args()
 
     # Logging
-    setup_logging()
+    setup_logger()
 
     # Load config
     config = load_config(args.config)
