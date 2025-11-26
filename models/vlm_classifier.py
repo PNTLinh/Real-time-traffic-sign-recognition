@@ -202,17 +202,32 @@ class VLMClassifier:
         Nhận ảnh BGR (numpy, như từ OpenCV) và danh sách bbox [x1,y1,x2,y2] (pixel).
         Trả về list kết quả VLM theo thứ tự bbox.
         """
-        # Chuyển sang PIL & crop
-        img_rgb = Image.fromarray(image_bgr[:, :, ::-1])  # BGR -> RGB
+        if len(bboxes_xyxy) == 0:
+            return []
+
+        h, w = image_bgr.shape[:2]
         crops: List[Image.Image] = []
-        W, H = img_rgb.size
+        fallback_rgb: Optional[Image.Image] = None
+
         for (x1, y1, x2, y2) in bboxes_xyxy:
-            x1 = max(0, int(round(x1)))
-            y1 = max(0, int(round(y1)))
-            x2 = min(W, int(round(x2)))
-            y2 = min(H, int(round(y2)))
-            if x2 <= x1 or y2 <= y1:
-                crops.append(img_rgb)  # fallback
-            else:
-                crops.append(img_rgb.crop((x1, y1, x2, y2)))
+            x1_i = max(0, int(round(x1)))
+            y1_i = max(0, int(round(y1)))
+            x2_i = min(w, int(round(x2)))
+            y2_i = min(h, int(round(y2)))
+
+            if x2_i <= x1_i or y2_i <= y1_i:
+                if fallback_rgb is None:
+                    fallback_rgb = Image.fromarray(image_bgr[:, :, ::-1].copy())
+                crops.append(fallback_rgb)
+                continue
+
+            patch = image_bgr[y1_i:y2_i, x1_i:x2_i]
+            if patch.size == 0:
+                if fallback_rgb is None:
+                    fallback_rgb = Image.fromarray(image_bgr[:, :, ::-1].copy())
+                crops.append(fallback_rgb)
+                continue
+
+            crops.append(Image.fromarray(patch[:, :, ::-1].copy()))
+
         return self.batched_predict(crops, topk=topk)

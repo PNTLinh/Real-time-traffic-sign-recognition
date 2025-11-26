@@ -11,16 +11,11 @@ import torch
 from utils.logger import setup_logger, draw_boxes, FPSMeter, overlay_fps
 from utils.paths import PATHS
 
-# ---- YOLO detector (bạn đã viết) ----
-# Yêu cầu: phải có lớp YoloDetector với:
-#   - thuộc tính class_names: List[str]
-#   - predict(frame_bgr) -> (boxes_xyxy, scores, class_ids)
 try:
     from models.yolo_detector import YoloDetector  # type: ignore
 except Exception as e:
     raise ImportError(
         "Không tìm thấy models/yolo_detector.py với lớp YoloDetector. "
-        "Hãy đảm bảo bạn đã implement detector này."
     ) from e
 
 # ---- VLM ----

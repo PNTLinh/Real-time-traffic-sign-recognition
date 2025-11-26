@@ -6,12 +6,10 @@ import cv2
 import albumentations as A
 import os
 import glob
-# Thư mục chứa file label
-label_dir = Path("../datasets/processed/processed_train/labels")
+label_dir = Path("local_root/datasets/processed/processed_train/labels")
 
 class_counter = Counter()
 
-# Đọc từng file label
 for label_file in os.listdir(label_dir):
     if label_file.endswith(".txt"):
         with open(label_dir / label_file, "r") as f:

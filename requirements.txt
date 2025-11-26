@@ -7,6 +7,7 @@ pillow
 opencv-python
 pyyaml
 ultralytics
+sahi
 pathlib
 collections
 matplotlib

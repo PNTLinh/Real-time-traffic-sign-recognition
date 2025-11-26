@@ -8,52 +8,56 @@ Xây dựng hệ thống nhận diện biển báo giao thông thời gian thự
 
 traffic-sign-system/
 │
-├── data/                          # Quản lý dữ liệu
-│   ├── loader.py                 # Load dataset, video
-│   ├── preprocess.py             # Tiền xử lý ảnh cho cả vlm và yolo
-│   ├── augmentation.py           # Data augmentation
-│   ├── test                      # Data thử nghiệm thực tế
-|   └── statistic                 # Thống kê dữ liệu
-├── models/                        # Models
-│   ├── yolo_detector.py          # YOLO detection
-│   ├── vlm_classifier.py         # VLM classification
-│   └── trainer.py                # Training cả 2 models
+├── data/                        # Quản lý dữ liệu
+│   ├── loader.py                # Load dataset, video stream
+│   ├── preprocess.py            # Tiền xử lý ảnh (resize, norm) cho VLM và YOLO
+│   ├── augmentation.py          # Data augmentation pipeline
+│   ├── test/                    # Dữ liệu thử nghiệm thực tế
+│   └── statistic/               # Script thống kê phân phối dữ liệu
 │
-├── pipeline/                      # Pipeline xử lý
-│   ├── realtime_system.py        # Xử lý real-time
-│   └── optimizer.py              # Tối ưu tốc độ
+├── models/                      # Định nghĩa và quản lý Models
+│   ├── yolo_detector.py         # Module YOLO detection
+│   ├── vlm_classifier.py        # Module VLM classification
+│   ├── run_demo.py              # Script chạy demo đơn giản
+│   └── sort.py                  # Thuật toán tracking (nếu có)
 │
-├── evaluation/                    # Đánh giá
-│   ├── metrics.py                # Tính mAP, Precision, Recall
-│   ├── evaluate.py               # Đánh giá models
-│   ├── benchmark.py              # Đo FPS, latency
-|   └── latency_yolo.py           # Đo latency của yolo
+├── pipeline/                    # Luồng xử lý chính
+│   ├── realtime_system.py       # Tích hợp toàn bộ hệ thống real-time
+│   ├── optimizer.py             # Các kỹ thuật tối ưu tốc độ (TensorRT, quantization)
+│   └── webcam.py                # Script chạy inference trên webcam
 │
-├── utils/                         # Tiện ích
-│   ├── logger.py                   # Vẽ kết quả
-│   
-│   
+├── evaluation/                  # Đánh giá hiệu năng
+│   ├── metrics.py               # Tính toán mAP, Precision, Recall
+│   ├── evaluate.py              # Script đánh giá tổng thể model
+│   └── latency_yolo.py          # Đo độ trễ (latency) của YOLO
 │
-├── configs/                       # Cấu hình
-│   └── config.yaml               # Config chung
+├── utils/                       # Các hàm tiện ích
+│   ├── logger.py                # Ghi log và visualize kết quả
+│   └── paths.py                 # Quản lý đường dẫn file
 │
-├── weights/                       # Model weights
+├── weights/                     # Weights và cấu hình model
 │   ├── yolo/
+│   │   ├── args.yaml
+│   │   ├── best.onnx
+│   │   ├── best.pt
+│   │   ├── model_in4.json
+│   │   └── get_metadata.py
 │   └── vlm/
+│       ├── config.json
+│       └── prompt.txt
 │
-├── datasets/                      # Dữ liệu 7/2/1
-│   ├── train/
-│   ├── val/
-│   └── test/
+├── datasets/                    # Dữ liệu (Chia tỉ lệ 7/2/1)
+│   ├── raw/                     # Dữ liệu thô
+│   └── processed/               # Dữ liệu đã qua xử lý & augmentation
 │
-├── outputs/                       # Kết quả
+├── outputs/                     # Nơi lưu kết quả đầu ra
 │   ├── logs/
+│   └── yolo/
 │
-├── main.py                        # Chạy real-time
-├── train.py                       # Training
-├── evaluate.py                    # Đánh giá
-├── requirements.txt
-└── README.md
+├── main.py                      # Entry point chạy hệ thống real-time
+├── requirements.txt             # Các thư viện phụ thuộc
+├── config.yaml                  # File cấu hình toàn cục
+└── README.md                    # Tài liệu dự án
 
 ### Đặc tả dữ liệu
 Bộ dữ liệu biển báo giao thông Việt Nam(vietnam-traffic-sign-vr1a7-ecrhf-xasim) có số lượng là 545 gồm 19 classes: Cấm đỗ xe, Cấm dừng đỗ xe, Cấm ngược chiều, Cấm ô tô, Cấm quay đầu, Cấm rẽ phải, Cấm rẽ trái, Dừng lại, Đường không bằng phẳng,Đường không ưu tiên, Đường ưu tiên, Người đi bộ, Tốc độ 30, Tốc độ 40, Tốc độ 50, Tốc độ 60, Tốc độ 80, Trẻ em qua đường, Vòng xuyến.
@@ -70,20 +74,24 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
    - <height>: Chiều cao của bounding box.
 
 ### Cách thực hiện 
-1. Clone và tải các phụ thuộc
-!git clone https://github.com/PNTLinh/Real-time-traffic-sign-recognition.git
-%cd Real-time-traffic-sign-recognition
-!pip install -r requirements.txt
-2. Kiểm tra & chỉnh config.yaml
-3. Huấn luyện YOLOv12
-python C:\Users\ntlinh\Documents\20251\DL\Real-time-traffic-sign-recognition\models\yolo_detector.py
+1. Clone repository
+git clone https://github.com/PNTLinh/Real-time-traffic-sign-recognition.git
+cd Real-time-traffic-sign-recognition
 
+2. Cài đặt các thư viện cần thiết
+pip install -r requirements.txt
 
-### Hướng dẫn chạy mô hình yolo
-- Thử nghiệm trên ảnh/video: models/huong_dan_su_dung_model_yolo.py
-- Thử nghiệm trên webcam: pipeline/webcam.py
+3. Cấu hình
+Kiểm tra và chỉnh sửa các tham số đường dẫn hoặc hyper-parameters trong file config.yaml.
 
+4. Huấn luyện 
+python models/yolo_detector.py
 
+5. Inference (Kiểm thử)
+python pipeline/webcam.py
+
+6. Chạy hệ thống tích hợp đầy đủ (YOLO + VLM):
+python main.py
 
 
 
