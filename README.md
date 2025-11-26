@@ -75,24 +75,30 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
 
 ### Cách thực hiện 
 1. Clone repository
+```text
 git clone https://github.com/PNTLinh/Real-time-traffic-sign-recognition.git
 cd Real-time-traffic-sign-recognition
-
+```
 2. Cài đặt các thư viện cần thiết
+```text
 pip install -r requirements.txt
-
+```
 3. Cấu hình
+
 Kiểm tra và chỉnh sửa các tham số đường dẫn hoặc hyper-parameters trong file config.yaml.
 
 4. Huấn luyện 
+```text
 python models/yolo_detector.py
-
+```
 5. Inference (Kiểm thử)
+```text
 python pipeline/webcam.py
-
+```
 6. Chạy hệ thống tích hợp đầy đủ (YOLO + VLM):
+```text
 python main.py
-
+```
 
 
 
