@@ -5,7 +5,7 @@
 Xây dựng hệ thống nhận diện biển báo giao thông thời gian thực sử dụng YOLOv12 để phát hiện biển báo và Vision-Language Model (VLM) để hiểu và phân loại ngữ nghĩa của biển báo. Hệ thống có khả năng chạy real-time (≥25 FPS) trên GPU/Edge device.
 
 ### Cấu trúc hệ thống
-
+```text
 traffic-sign-system/
 │
 ├── data/                        # Quản lý dữ liệu
@@ -58,7 +58,7 @@ traffic-sign-system/
 ├── requirements.txt             # Các thư viện phụ thuộc
 ├── config.yaml                  # File cấu hình toàn cục
 └── README.md                    # Tài liệu dự án
-
+```
 ### Đặc tả dữ liệu
 Bộ dữ liệu biển báo giao thông Việt Nam(vietnam-traffic-sign-vr1a7-ecrhf-xasim) có số lượng là 545 gồm 19 classes: Cấm đỗ xe, Cấm dừng đỗ xe, Cấm ngược chiều, Cấm ô tô, Cấm quay đầu, Cấm rẽ phải, Cấm rẽ trái, Dừng lại, Đường không bằng phẳng,Đường không ưu tiên, Đường ưu tiên, Người đi bộ, Tốc độ 30, Tốc độ 40, Tốc độ 50, Tốc độ 60, Tốc độ 80, Trẻ em qua đường, Vòng xuyến.
 
