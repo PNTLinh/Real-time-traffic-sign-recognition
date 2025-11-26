@@ -88,7 +88,6 @@ python main.py --mode train \
     --epochs 100 \
     --batch 16 \
     --imgsz 320 \
-    --model-size n
 ```
 Model tốt nhất sẽ được lưu tại:
 
