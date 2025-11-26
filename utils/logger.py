@@ -1,18 +1,9 @@
-"""
-Utility: Logging + Drawing Boxes + FPS Counter
-Refactor version (an toàn hơn – hiệu suất cao – ổn định)
-"""
-
 from __future__ import annotations
 import os, sys, time, logging
 from typing import List, Tuple, Sequence, Optional
 import numpy as np
 import cv2
 
-
-# =============================================================
-# LOGGER
-# =============================================================
 
 def setup_logger(
     name: str = "traffic-sign",
@@ -50,12 +41,6 @@ def setup_logger(
     logger.addHandler(fh)
 
     return logger
-
-
-# =============================================================
-# TEXT + DRAWING UTILITIES
-# =============================================================
-
 def _text_size(text: str, font_scale: float, thickness: int):
     return cv2.getTextSize(
         text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
@@ -73,10 +58,6 @@ def put_text(
     bg_color: Tuple[int, int, int] = (0, 0, 0),
     alpha: float = 0.65,
 ):
-    """
-    Vẽ text có nền mờ → dễ đọc. 
-    - alpha: độ mờ của nền (0–1)
-    """
     x, y = org
     (w, h) = _text_size(text, font_scale, thickness)
 
@@ -95,11 +76,6 @@ def put_text(
         color, thickness, cv2.LINE_AA
     )
 
-
-# =============================================================
-# COLOR PALETTE
-# =============================================================
-
 def _color_for_id(idx: int) -> Tuple[int, int, int]:
     """
     Tạo màu ổn định (fixed seed) theo class_id.
@@ -107,11 +83,6 @@ def _color_for_id(idx: int) -> Tuple[int, int, int]:
     rng = np.random.default_rng(seed=idx * 123457)
     r, g, b = rng.integers(50, 215, size=3)
     return int(r), int(g), int(b)
-
-
-# =============================================================
-# DRAW BOUNDING BOX
-# =============================================================
 
 def draw_boxes(
     img: np.ndarray,
@@ -121,20 +92,14 @@ def draw_boxes(
     class_ids: Optional[Sequence[int]] = None,
     show_score: bool = True,
 ) -> np.ndarray:
-    """
-    Vẽ bounding boxes + nhãn + điểm confidence.
-    Hỗ trợ YOLO-only, VLM-only hoặc fused-class.
-    """
     h, w = img.shape[:2]
 
     for i, box in enumerate(boxes_xyxy):
-        # Clip & ensure int
         x1 = max(0, min(w - 1, int(box[0])))
         y1 = max(0, min(h - 1, int(box[1])))
         x2 = max(0, min(w - 1, int(box[2])))
         y2 = max(0, min(h - 1, int(box[3])))
 
-        # Stable color
         color = (
             _color_for_id(class_ids[i])
             if class_ids is not None
@@ -143,12 +108,10 @@ def draw_boxes(
 
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
 
-        # Label
         name = labels[i] if i < len(labels) else ""
         sc = f"{scores[i]:.2f}" if (scores and i < len(scores)) else ""
         caption = f"{name} {sc}" if (show_score and sc) else name
 
-        # Insert text
         put_text(
             img,
             caption,
@@ -162,16 +125,8 @@ def draw_boxes(
         )
 
     return img
-
-
-# =============================================================
-# FPS METER
-# =============================================================
-
 class FPSMeter:
-    """
-    Tính FPS trung bình bằng sliding window.
-    """
+    
     def __init__(self, avg_over: int = 30):
         self.avg_over = max(2, avg_over)
         self.timestamps: List[float] = []

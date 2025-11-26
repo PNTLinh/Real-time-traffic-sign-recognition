@@ -1,15 +1,10 @@
-# Load và preprocess dataset
-
 import os
 import cv2
 from pathlib import Path
 from collections import Counter
 
-
-# Thu muc chua anh goc
 original_dir = Path("../datasets/raw/raw_train/images")
 
-# Định dạng ảnh phổ biến
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".heif", ".avif"}
 
 sizes = []
@@ -22,16 +17,10 @@ for filename in os.listdir(original_dir):
             h, w = img.shape[:2]
             sizes.append((w, h))
 
-
-# Dem so lan xuat hien cua moi kich thuoc
 size_counts = Counter(sizes)
 for size, count in size_counts.items():
     print(f"Kích thước: {size[0]}x{size[1]} - Số lượng: {count}")
 
-
-
-
-# Thu muc dau vao cho viec tien xu ly
 input_img_dir = Path("../datasets/raw/raw_train/images")
 input_lbl_dir = Path("../datasets/raw/raw_train/labels")
 output_img_dir = Path("../datasets/processed/processed_train/images")
@@ -48,20 +37,15 @@ output_lbl_dir = Path("../datasets/processed/processed_train/labels")
 # input_lbl_dir = Path("../datasets/raw/raw_test/labels")
 # output_img_dir = Path("../datasets/processed/processed_test/images")
 # output_lbl_dir = Path("../datasets/processed/processed_test/labels")
-# Kích thước mục tiêu để thay đổi kích thước ảnh
+
 target_size = (320, 320)
 
-# Định dạng ảnh phổ biến
-IMG_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".heif", ".avif"}
-
-# Tạo thư mục đầu ra nếu chưa tồn tại
 output_img_dir.mkdir(parents=True, exist_ok=True)
 output_lbl_dir.mkdir(parents=True, exist_ok=True)
 
-# Tạo thư mục đầu vao nếu chưa tồn tại
 os.makedirs(output_img_dir, exist_ok=True)
 os.makedirs(output_lbl_dir, exist_ok=True)
-# Doc anh tu nhieu dinh dang
+
 def read_image_any_format(image_path):
     image_path = Path(image_path)
     ext = image_path.suffix.lower()
@@ -71,7 +55,6 @@ def read_image_any_format(image_path):
     else:
         raise ValueError(f"Định dạng ảnh không được hỗ trợ: {ext}")
 
-# Ham de them vien den va thay doi kich thuoc anh
 def letterbox_image(img, labels, target_size):
     h, w = img.shape[:2]
     if isinstance(target_size, (tuple, list)):
@@ -103,8 +86,6 @@ def letterbox_image(img, labels, target_size):
 
     return padded_img, new_labels
 
-
-
 for filename in os.listdir(input_img_dir):
     ext = Path(filename).suffix.lower()
     if ext not in IMG_EXTS:
@@ -119,7 +100,6 @@ for filename in os.listdir(input_img_dir):
         print(f"Bỏ qua {filename}")
         continue
 
-    # đọc label
     labels = []
     if os.path.exists(label_path):
         with open(label_path, "r") as f:
@@ -130,10 +110,8 @@ for filename in os.listdir(input_img_dir):
 
     padded, new_labels = letterbox_image(image, labels, target_size)
 
-    # lưu ảnh (dạng .jpg)
     cv2.imwrite(os.path.join(output_img_dir, f"{name}.jpg"), padded)
 
-    # lưu label
     with open(os.path.join(output_lbl_dir, f"{name}.txt"), "w") as f:
         for cls, x, y, w_box, h_box in new_labels:
             f.write(f"{int(cls)} {x:.6f} {y:.6f} {w_box:.6f} {h_box:.6f}\n")
@@ -142,9 +120,6 @@ for filename in os.listdir(input_img_dir):
 
 print("\n Hoàn tất resize + pad tất cả ảnh về 320×320!")
 
-
-
-# Kiem tra anh sau khi resize + pad
 import matplotlib.pyplot as plt
 
 def show_image_with_labels(img, labels):
@@ -153,7 +128,6 @@ def show_image_with_labels(img, labels):
 
     for label in labels:
         cls, x, y, bw, bh = label
-        # chuyển từ YOLO format (x,y,w,h chuẩn hóa) sang pixel
         cx, cy = int(x * w), int(y * h)
         box_w, box_h = int(bw * w), int(bh * h)
 
@@ -182,7 +156,6 @@ def show_image_with_labels(img, labels, title=""):
 
     for label in labels:
         cls, x, y, bw, bh = label
-        # chuyển YOLO (x,y,w,h) → pixel
         cx, cy = int(x * w), int(y * h)
         box_w, box_h = int(bw * w), int(bh * h)
         x1, y1 = int(cx - box_w / 2), int(cy - box_h / 2)
@@ -198,10 +171,6 @@ def show_image_with_labels(img, labels, title=""):
     plt.axis("off")
     plt.show()
 
-
-# =========================
-# 💡 Hiển thị ngẫu nhiên vài ảnh
-# =========================
 num_samples = 5   # số ảnh muốn xem
 sample_files = random.sample(os.listdir(output_img_dir), num_samples)
 

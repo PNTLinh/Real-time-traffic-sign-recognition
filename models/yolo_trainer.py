@@ -5,14 +5,11 @@ def train_yolo(
     data_yaml='datasets/processed/data.yaml',
     epochs=100,
     imgsz=320,
-    batch=16,
-    model_size='n'
+    batch=16
 ):
-    """
-    Huấn luyện YOLO model
-    """
-    model = YOLO("yolo11x.pt")
-    
+    model = YOLO("yolo12l.pt")
+
+
     results = model.train(
         data=data_yaml,
         epochs=epochs,
@@ -27,11 +24,11 @@ def train_yolo(
     )
 
     metrics = model.val()
-    print("\n📊 Validation Results:")
+    print("\nValidation Results:")
     print(f"mAP50: {metrics.box.map50:.4f}")
     print(f"mAP50-95: {metrics.box.map:.4f}")
 
     model.export(format='onnx')
-    print("✅ Model exported to ONNX")
+    print("Model exported to ONNX")
 
     return model, results

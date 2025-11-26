@@ -4,14 +4,6 @@ from ultralytics import YOLO
 from typing import List, Dict, Optional
 import ultralytics.nn.tasks
 class YOLODetector:
-    """
-    Clean-refactor YOLO detector:
-    - RGB input (fix accuracy)
-    - Safe device placement
-    - Clean outputs
-    - Batch detection
-    """
-
     def __init__(
         self,
         model_path="weights/yolo/best.pt",
@@ -29,10 +21,6 @@ class YOLODetector:
         self.iou = iou
         self.class_names = self.model.names
         print(f"📊 Classes: {len(self.class_names)}")
-
-    # -----------------------------------------------------------------
-    # DETECT SINGLE IMAGE
-    # -----------------------------------------------------------------
 
     def detect(self, image_bgr) -> List[Dict]:
         """Detect on one frame."""
@@ -58,10 +46,6 @@ class YOLODetector:
             })
         return dets
 
-    # -----------------------------------------------------------------
-    # BATCH DETECT
-    # -----------------------------------------------------------------
-
     def detect_batch(self, images_bgr: List):
         rbg_list = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in images_bgr]
         results = self.model.predict(
@@ -86,10 +70,6 @@ class YOLODetector:
                 })
             batch_out.append(dets)
         return batch_out
-
-    # -----------------------------------------------------------------
-    # VISUALIZATION
-    # -----------------------------------------------------------------
 
     def visualize(self, image_bgr, detections):
         img = image_bgr.copy()

@@ -1,8 +1,3 @@
-"""
-Đánh giá VLM trên các crop GT theo định dạng nhãn YOLO:
-mỗi ảnh có file .txt: <class_id> <x_center> <y_center> <w> <h> (chuẩn hoá 0..1)
-Script sẽ crop vùng GT, chạy VLM zero-shot, rồi in Accuracy/Top-k/F1.
-"""
 from __future__ import annotations
 import os, glob
 from typing import List, Tuple

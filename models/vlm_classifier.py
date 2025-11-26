@@ -14,10 +14,6 @@ try:
 except Exception:
     raise ImportError("Cần cài: pip install open-clip-torch")
 
-# ---------------------------------------------------------------------
-# CONSTANTS
-# ---------------------------------------------------------------------
-
 LABELS_VN = [
     "Cấm đỗ xe", "Cấm dừng đỗ xe", "Cấm ngược chiều", "Cấm ô tô",
     "Cấm quay đầu", "Cấm rẽ phải", "Cấm rẽ trái", "Dừng lại",
@@ -37,21 +33,7 @@ TEMPLATES_EN = [
     "road sign: {}",
     "photo of a traffic sign: {}",
 ]
-
-
-# ---------------------------------------------------------------------
-# MAIN CLASS
-# ---------------------------------------------------------------------
-
 class VLMClassifier:
-    """
-    Refactor version:
-    - Hỗ trợ caching text features (tăng tốc mạnh)
-    - FP16 safe-mode
-    - Safe cropping
-    - Clean model design (không chứa pipeline logic)
-    """
-
     def __init__(
         self,
         model_name: str = "ViT-B-32",
@@ -65,23 +47,21 @@ class VLMClassifier:
     ):
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        print(f"🔄 Loading OpenCLIP model: {model_name} ...")
+        print(f"Loading OpenCLIP model: {model_name} ...")
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=pretrained, device=self.device
         )
         self.tokenizer = open_clip.get_tokenizer(model_name)
 
-        # safe FP16
         self.use_half = False
         if use_half and self.device.startswith("cuda"):
             try:
                 self.model = self.model.half()
                 self.use_half = True
-                print("⚡ Using FP16 (safe-mode enabled)")
+                print("Using FP16 (safe-mode enabled)")
             except Exception:
-                print("⚠️ FP16 not supported, fallback to FP32")
+                print("FP16 not supported, fallback to FP32")
 
-        # labels & templates
         self.labels = labels or LABELS_VN
         self.templates_vi = templates_vi or TEMPLATES_VI
         self.templates_en = templates_en or TEMPLATES_EN
@@ -89,31 +69,26 @@ class VLMClassifier:
         self.cache_path = Path(cache_path)
         self.text_features: Optional[torch.Tensor] = None
 
-        # Load or build text features
         self._init_text_features()
 
-        print(f"✅ VLM Classifier ready on {self.device}")
-        print(f"📊 Classes: {len(self.labels)}")
-
-    # -----------------------------------------------------------------
-    # TEXT FEATURES
-    # -----------------------------------------------------------------
+        print(f"VLM Classifier ready on {self.device}")
+        print(f"Classes: {len(self.labels)}")
 
     def _init_text_features(self):
         """Load từ cache hoặc build mới."""
         if self.cache_path.exists():
-            print("📦 Loading cached text features ...")
+            print("Loading cached text features ...")
             self.text_features = torch.load(self.cache_path, map_location=self.device)
             return
 
-        print("🧱 Building text features ...")
+        print("Building text features ...")
         self._build_text_features()
         self._save_cache()
 
     def _save_cache(self):
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.text_features, self.cache_path)
-        print(f"💾 Text features cached → {self.cache_path}")
+        print(f"Text features cached → {self.cache_path}")
 
     def _build_text_features(self):
         prompts = []
@@ -129,17 +104,12 @@ class VLMClassifier:
             feats = self.model.encode_text(tokens)
             feats = feats / feats.norm(dim=-1, keepdim=True)
 
-        # average per-class
         k = len(self.templates_vi) + len(self.templates_en)
         per_class = []
         for i in range(len(self.labels)):
             per_class.append(feats[i * k: (i + 1) * k].mean(dim=0))
 
         self.text_features = torch.stack(per_class)
-
-    # -----------------------------------------------------------------
-    # IMAGE ENCODING
-    # -----------------------------------------------------------------
 
     def _pil_to_tensor(self, image: Image.Image) -> torch.Tensor:
         if image.mode != "RGB":
@@ -170,10 +140,6 @@ class VLMClassifier:
             "logits": logits.cpu().numpy(),
         }
 
-    # -----------------------------------------------------------------
-    # CROP + BATCH PREDICT
-    # -----------------------------------------------------------------
-
     def safe_crop(self, img: np.ndarray, x1, y1, x2, y2):
         h, w = img.shape[:2]
         x1 = max(0, int(x1))
@@ -201,7 +167,6 @@ class VLMClassifier:
         if not crops:
             return []
 
-        # batch encode
         batch = torch.cat([self._pil_to_tensor(im) for im in crops], dim=0)
         img_feat = self.model.encode_image(batch)
         img_feat = img_feat / img_feat.norm(dim=-1, keepdim=True)

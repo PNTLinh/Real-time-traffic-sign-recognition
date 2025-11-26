@@ -19,11 +19,9 @@ for label_file in os.listdir(label_dir):
                     cls = int(parts[0])
                     class_counter[cls] += 1
 
-# In ra số lượng từng class
 for cls, count in class_counter.items():
     print(f"Class {cls}: {count} objects")
 
-# Vẽ biểu đồ
 plt.figure(figsize=(8, 5))
 plt.bar(class_counter.keys(), class_counter.values(), color='skyblue')
 plt.xlabel("Class")
@@ -31,17 +29,14 @@ plt.ylabel("Số lượng")
 plt.title("Số lượng từng class trong dataset")
 plt.xticks(list(class_counter.keys()))
 
-# Lưu biểu đồ ra file
 output_path = "class_counts.png"
 plt.savefig(output_path, dpi=300, bbox_inches='tight')
 print(f"✅ Biểu đồ đã được lưu tại: {output_path}")
 
-# Hiển thị biểu đồ
 plt.show()
 
 
 
-# --- 1. ĐỊNH NGHĨA CÁC PHÉP BIẾN ĐỔI (Không đổi) ---
 transform = A.Compose([
     A.HorizontalFlip(p=0.5),
     A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.1, rotate_limit=15, p=0.8),
@@ -49,8 +44,6 @@ transform = A.Compose([
     A.GaussNoise(p=0.3),
     A.Blur(blur_limit=3, p=0.2),
 ], bbox_params=A.BboxParams(format='yolo', label_fields=['class_labels']))
-
-# --- 2. HÀM AUGMENTATION (Không đổi) ---
 
 def augment_single_file(image_path, label_path, output_image_dir, output_label_dir, base_name, num_augmentations):
     try:
@@ -79,10 +72,8 @@ def augment_single_file(image_path, label_path, output_image_dir, output_label_d
             full_image_path = os.path.join(output_image_dir, new_image_name)
             full_label_path = os.path.join(output_label_dir, new_label_name)
 
-            # Lưu ảnh
             cv2.imwrite(full_image_path, cv2.cvtColor(augmented['image'], cv2.COLOR_RGB2BGR))
 
-            # Lưu label
             with open(full_label_path, 'w') as f:
                 for bbox, class_id in zip(augmented['bboxes'], augmented['class_labels']):
                     x_center, y_center, width, height = bbox
@@ -93,7 +84,6 @@ def augment_single_file(image_path, label_path, output_image_dir, output_label_d
     except Exception as e:
         print(f"    LỖI TRONG QUÁ TRÌNH AUGMENT: {e}")
 
-# --- 3. HÀM CHÍNH ĐỂ TÌM VÀ XỬ LÝ ---
 def process_target_class(image_dir, label_dir, target_class_id, num_per_image):
     print("================ SCRIPT BẮT ĐẦU ================")
     print(f"[Bước 1] Quét tất cả file .txt trong thư mục:\n  '{os.path.abspath(label_dir)}'")
@@ -112,7 +102,6 @@ def process_target_class(image_dir, label_dir, target_class_id, num_per_image):
             continue
             
         base_name = os.path.splitext(os.path.basename(label_path))[0]
-        # print(f"  - Đang kiểm tra file: {base_name}.txt") # Bỏ comment dòng này nếu muốn xem TOÀN BỘ file đang quét
         
         contains_target = False
         with open(label_path, 'r') as f:
@@ -125,7 +114,6 @@ def process_target_class(image_dir, label_dir, target_class_id, num_per_image):
             found_count += 1
             print(f"\n[Bước 2] TÌM THẤY CLASS {target_class_id} trong file '{base_name}.txt'")
             
-            # Tìm ảnh tương ứng (thử nhiều định dạng)
             image_path = None
             for ext in ['.jpg', '.png', '.jpeg']:
                 potential_path = os.path.join(image_dir, base_name + ext)
@@ -144,12 +132,10 @@ def process_target_class(image_dir, label_dir, target_class_id, num_per_image):
     else:
         print(f"-> Đã xử lý tổng cộng {found_count} file chứa class {target_class_id}.")
 
-# --- CẤU HÌNH VÀ CHẠY ---
 if __name__ == '__main__':
     TRAIN_IMAGE_DIR = '../datasets/processed/processed_train/images'
     TRAIN_LABEL_DIR = '../datasets/processed/processed_train/labels'
     
-    # Lam giau cho class 19 gap 25 lan binh thuong
     TARGET_CLASS = 19
     NUM_AUGMENTATIONS_PER_IMAGE = 25
     
@@ -160,12 +146,10 @@ if __name__ == '__main__':
         NUM_AUGMENTATIONS_PER_IMAGE
     )
 
-    # Lam giau cho cac class [0, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18] gap 3 lan binh thuong
     TARGET_CLASSES = [0, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 14, 15, 16, 17, 18]
     NUM_NEW_IMAGES_PER_ORIGINAL = 2 # cái mới được aug
     
     print("================ SCRIPT LÀM GIÀU DỮ LIỆU BẮT ĐẦU ================")
-    # Lặp qua từng class trong danh sách và thực hiện augmentation
     for target_class in TARGET_CLASSES:
         process_target_class(
             TRAIN_IMAGE_DIR,
@@ -174,11 +158,9 @@ if __name__ == '__main__':
             NUM_NEW_IMAGES_PER_ORIGINAL
         )
 
-    # Lam giau cho cac class [1, 13] gap 2 lan binh thuong
     TARGET_CLASSES = [1, 13]
     NUM_NEW_IMAGES_PER_ORIGINAL = 1
     print("================ SCRIPT LÀM GIÀU DỮ LIỆU BẮT ĐẦU ================")
-    # Lặp qua từng class trong danh sách và thực hiện augmentation
     for target_class in TARGET_CLASSES:
         process_target_class(
             TRAIN_IMAGE_DIR,
@@ -187,23 +169,15 @@ if __name__ == '__main__':
             NUM_NEW_IMAGES_PER_ORIGINAL
         )
 
-
-
-
-
-
-# Visualize so luong class sau khi augment
 import os
 from pathlib import Path
 from collections import Counter
 import matplotlib.pyplot as plt
 
-# Thư mục chứa file label
 label_dir = Path("../datasets/processed/processed_train/labels")
 
 class_counter = Counter()
 
-# Đọc từng file label
 for label_file in os.listdir(label_dir):
     if label_file.endswith(".txt"):
         with open(label_dir / label_file, "r") as f:
@@ -213,11 +187,9 @@ for label_file in os.listdir(label_dir):
                     cls = int(parts[0])
                     class_counter[cls] += 1
 
-# In ra số lượng từng class
 for cls, count in class_counter.items():
     print(f"Class {cls}: {count} objects")
 
-# Vẽ biểu đồ
 plt.figure(figsize=(8, 5))
 plt.bar(class_counter.keys(), class_counter.values(), color='skyblue')
 plt.xlabel("Class")
@@ -225,10 +197,8 @@ plt.ylabel("Số lượng")
 plt.title("Số lượng từng class trong dataset")
 plt.xticks(list(class_counter.keys()))
 
-# Lưu biểu đồ ra file
 output_path = "dataset_after_aug.png"
 plt.savefig(output_path, dpi=300, bbox_inches='tight')
 print(f"✅ Biểu đồ đã được lưu tại: {output_path}")
 
-# Hiển thị biểu đồ
 plt.show()
