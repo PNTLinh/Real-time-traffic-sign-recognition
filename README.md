@@ -32,13 +32,7 @@ traffic-sign-system/
 │   ├── logger.py                # Ghi log và visualize kết quả
 │   └── paths.py                 # Quản lý đường dẫn file
 │
-├── weights/                     # Weights và cấu hình model
-│   ├── yolo/
-│   │   ├── args.yaml
-│   │   ├── best.onnx
-│   │   ├── best.pt
-│   │   ├── model_in4.json
-│   │   └── get_metadata.py
+├── weights/                    
 │   └── vlm/
 │       ├── config.json
 │       └── prompt.txt
@@ -79,65 +73,56 @@ Dữ liệu thu được sau xử lý thu được 2486 bản ghi:
 git clone https://github.com/PNTLinh/Real-time-traffic-sign-recognition.git
 cd Real-time-traffic-sign-recognition
 ```
-1.2 Tạo môi trường Python
 
-py -3.10 -m venv prodl
-
-prodl\Scripts\activate   # Windows
-
-1.3 Cài dependencies
+1.2 Cài dependencies
+```text
 pip install -r requirements.txt
+```
+2. Chuẩn bị config.yaml
 
-📦 2. Chuẩn bị config.yaml
 
-
-🏋️‍♂️ 3. Huấn luyện YOLO
+3. Huấn luyện YOLO
+```text
 python main.py --mode train \
     --data datasets/processed/data.yaml \
     --epochs 100 \
     --batch 16 \
     --imgsz 320 \
     --model-size n
-
-
+```
 Model tốt nhất sẽ được lưu tại:
 
 outputs/yolo/train/weights/best.pt
 
-🎥 4. Chạy realtime (webcam / video / image)
-4.1 Webcam (mặc định camera 0)
-python main.py --mode inference --source webcam
+4. Chạy realtime (webcam / video / image)
 
-4.2 Chạy video input
+4.1 Chạy video input
+```text
 python main.py --mode inference --source video \
     --input data/test/traffic.mp4
-
-4.3 Chạy 1 ảnh
+```
+4.2 Chạy 1 ảnh
+```text
 python main.py --mode inference --source image \
     --input data/test/sign.jpg
+```
+5. Tối ưu hóa YOLO (ONNX / TensorRT / Benchmark)
 
-🧠 5. Tắt VLM (YOLO only)
-python main.py --mode inference --source webcam --no-vlm
-
-⚡ 6. Tối ưu hóa YOLO (ONNX / TensorRT / Benchmark)
-6.1 Xuất ONNX
+5.1 Xuất ONNX
+```text
 python main.py --mode optimize --optimize-action onnx --model weights/yolo/best.pt
-
-6.2 Xuất TensorRT
+```
+5.2 Xuất TensorRT
+```text
 python main.py --mode optimize --optimize-action tensorrt --model weights/yolo/best.onnx
-
-6.3 Benchmark tốc độ model
+```
+5.3 Benchmark tốc độ model
+```text
 python main.py --mode optimize --optimize-action benchmark \
     --model weights/yolo/best.pt \
     --iterations 200
+```
 
-🧪 7. Test nhanh YOLO
-python main.py --mode test --input data/test/sample.jpg
-
-
-Output sẽ được lưu tại:
-
-outputs/test_result.jpg
 
 
 
