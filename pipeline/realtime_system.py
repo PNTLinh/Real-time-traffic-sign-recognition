@@ -22,6 +22,7 @@ def fusion_bayesian(p_yolo: float, p_vlm: float):
 class RealTimeSystem:
     def __init__(
         self,
+        model_path="weights/yolo/best.pt", 
         camera_id=0,
         img_size=320,
         show_vlm=True,
@@ -33,8 +34,13 @@ class RealTimeSystem:
 
         self.frame_queue = Queue(maxsize=3)
 
-        print("Initializing models...")
-        self.detector = YOLODetector("weights/yolo/best.pt")
+        print(f"Initializing models from: {model_path}") 
+
+        if not os.path.exists(model_path):
+             print(f"ERROR: Model file not found at: {model_path}")
+
+        self.detector = YOLODetector(model_path)
+
         vlm_cache = "weights/vlm/text_features.pt"
         if not os.path.exists(vlm_cache):
              print(f"Warning: VLM cache not found at {vlm_cache}. It will be created.")
@@ -46,6 +52,7 @@ class RealTimeSystem:
 
         self.camera_id = camera_id
         self.cap = None
+        self.running = False
         self.running = False
 
     def process_frame(self, frame):

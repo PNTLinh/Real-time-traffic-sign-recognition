@@ -1,36 +1,53 @@
 import cv2
 import torch
+import torch.nn as nn
 from ultralytics import YOLO
+import ultralytics.nn.tasks 
 from typing import List, Dict, Optional
-import ultralytics.nn.tasks
+
 class YOLODetector:
     def __init__(
         self,
         model_path="weights/yolo/best.pt",
-        conf=0.5,
-        iou=0.45,
+        conf=0.1,
+        iou=0.6,
         device: Optional[str] = None,
     ):
-        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"🔄 Loading YOLO model on {self.device} ...")
-        torch.serialization.add_safe_globals([ultralytics.nn.tasks.DetectionModel])
-        self.model = YOLO(model_path)
-        self.model.to(self.device)
+        if device is None:
+            self.device = 0 if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+            
+        print(f"Loading YOLO model from: {model_path}")
+        safe_list = [ultralytics.nn.tasks.DetectionModel]
+        for name in dir(nn):
+            attr = getattr(nn, name)
+            if isinstance(attr, type):
+                safe_list.append(attr)
+        torch.serialization.add_safe_globals(safe_list)
+        self.model = YOLO(model_path, task='detect')
+        if model_path.endswith('.pt'):
+            torch_device = f"cuda:{self.device}" if isinstance(self.device, int) else self.device
+            self.model.to(torch_device)
+            print(f"PyTorch model moved to {torch_device}")
+        else:
+            print(f"Optimized model loaded (TensorRT/ONNX). Skipping .to() move.")
 
         self.conf = conf
         self.iou = iou
         self.class_names = self.model.names
-        print(f"📊 Classes: {len(self.class_names)}")
+        print(f"Classes: {len(self.class_names)}")
 
     def detect(self, image_bgr) -> List[Dict]:
         """Detect on one frame."""
+        # Ultralytics can handle BGR directly, but converting to RGB is safer practice
         rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
         result = self.model.predict(
             rgb,
             conf=self.conf,
             iou=self.iou,
-            device=self.device,
+            device=self.device, # Pass 0 for GPU, 'cpu' for CPU
             verbose=False
         )[0]
 
@@ -48,6 +65,7 @@ class YOLODetector:
 
     def detect_batch(self, images_bgr: List):
         rbg_list = [cv2.cvtColor(im, cv2.COLOR_BGR2RGB) for im in images_bgr]
+        
         results = self.model.predict(
             rbg_list,
             conf=self.conf,
@@ -86,5 +104,3 @@ class YOLODetector:
             cv2.putText(img, label, (x1, y1 - 4),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         return img
-    
-    

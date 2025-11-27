@@ -39,6 +39,7 @@ def inference_mode(args, config):
     enable_vlm = not args.no_vlm
 
     system = RealTimeSystem(
+        model_path=args.model,
         camera_id=0,
         img_size=config.get("img_size", 320),
         show_vlm=enable_vlm,
